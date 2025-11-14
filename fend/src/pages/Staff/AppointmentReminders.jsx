@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "../../api/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { Modal, Button, Form } from "react-bootstrap";
+import toast from "react-hot-toast";
 
 function AppointmentReminders() {
   const [appointments, setAppointments] = useState([]);
@@ -31,7 +32,7 @@ function AppointmentReminders() {
   const handleOpenModal = (appointment) => {
     // Additional safety check - only allow reminders for approved appointments
     if (appointment.status !== 'approved') {
-      alert('Only approved appointments can receive reminders.');
+      toast.error('Only approved appointments can receive reminders.');
       return;
     }
 
@@ -56,11 +57,11 @@ function AppointmentReminders() {
         edited,
       });
 
-      alert("SMS reminder sent!");
+      toast.success("SMS reminder sent!");
       setShowModal(false);
       fetchRemindableAppointments();
     } catch (err) {
-      alert("Failed to send SMS reminder.");
+      toast.error("Failed to send SMS reminder.");
       console.error(err);
     } finally {
       setSending((prev) => ({ ...prev, [id]: false }));

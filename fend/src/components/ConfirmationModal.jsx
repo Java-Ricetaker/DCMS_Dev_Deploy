@@ -1,9 +1,10 @@
+import { createPortal } from 'react-dom';
 import './ConfirmationModal.css';
 
 function ConfirmationModal({ show, onConfirm, onCancel, title, message, confirmText = "Confirm", cancelText = "Cancel", variant = "danger" }) {
   if (!show) return null;
 
-  return (
+  const modalContent = (
     <div className="confirmation-modal-overlay" onClick={onCancel}>
       <div className="confirmation-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="confirmation-modal-header">
@@ -32,6 +33,8 @@ function ConfirmationModal({ show, onConfirm, onCancel, title, message, confirmT
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 export default ConfirmationModal;

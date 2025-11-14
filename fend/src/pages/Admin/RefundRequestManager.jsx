@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
+import toast from "react-hot-toast";
 
 export default function RefundRequestManager() {
   const [refundRequests, setRefundRequests] = useState([]);
@@ -46,7 +47,7 @@ export default function RefundRequestManager() {
       setShowDetailsModal(false);
       setSelectedRequest(null);
     } catch (e) {
-      alert(e?.response?.data?.message || "Failed to approve refund request.");
+      toast.error(e?.response?.data?.message || "Failed to approve refund request.");
     } finally {
       setActionLoading(null);
     }
@@ -66,7 +67,7 @@ export default function RefundRequestManager() {
       setShowDetailsModal(false);
       setSelectedRequest(null);
     } catch (e) {
-      alert(e?.response?.data?.message || "Failed to reject refund request.");
+      toast.error(e?.response?.data?.message || "Failed to reject refund request.");
     } finally {
       setActionLoading(null);
     }
@@ -83,7 +84,7 @@ export default function RefundRequestManager() {
       setShowProcessModal(false);
       setSelectedRequest(null);
     } catch (e) {
-      alert(e?.response?.data?.message || "Failed to process refund request.");
+      toast.error(e?.response?.data?.message || "Failed to process refund request.");
     } finally {
       setProcessing(false);
     }
@@ -103,7 +104,7 @@ export default function RefundRequestManager() {
       setSelectedRequest(null);
       setShowDetailsModal(false);
     } catch (e) {
-      alert(e?.response?.data?.message || "Failed to mark refund request as completed.");
+      toast.error(e?.response?.data?.message || "Failed to mark refund request as completed.");
     } finally {
       setActionLoading(null);
     }

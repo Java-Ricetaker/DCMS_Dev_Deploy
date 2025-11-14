@@ -4,6 +4,7 @@ import api from "../../api/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import ToothChart from "../../components/Dentist/ToothChart";
 import MedicalHistoryView from "../../components/Dentist/MedicalHistoryView";
+import toast from "react-hot-toast";
 
 function DentistVisitManager() {
   const navigate = useNavigate();
@@ -138,7 +139,7 @@ function DentistVisitManager() {
         navigate('/dentist/dashboard');
       }
     } catch (err) {
-      alert("Failed to save notes: " + (err.response?.data?.message || "Unknown error"));
+      toast.error("Failed to save notes: " + (err.response?.data?.message || "Unknown error"));
     } finally {
       setSaving(false);
     }

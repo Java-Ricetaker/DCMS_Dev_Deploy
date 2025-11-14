@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 export default function SendVisitCodeModal({ visit, onClose, onSuccess }) {
   const [dentists, setDentists] = useState([]);
@@ -384,7 +385,7 @@ export default function SendVisitCodeModal({ visit, onClose, onSuccess }) {
       });
       
       // Show success message
-      alert(`Visit code sent successfully to Dr. ${selectedDentist.dentist_name || selectedDentist.dentist_code}!`);
+      toast.success(`Visit code sent successfully to Dr. ${selectedDentist.dentist_name || selectedDentist.dentist_code}!`);
       
       if (onSuccess) {
         onSuccess(response.data, selectedDentist);

@@ -3,8 +3,10 @@ import { Outlet, useNavigate, NavLink } from "react-router-dom";
 import api from "../api/api";
 import { useAuth } from "../hooks/useAuth";
 import NotificationsBell from "../components/NotificationBell";
+import ConfirmationModal from "../components/ConfirmationModal";
 import { getFingerprint } from "../utils/getFingerprint";
 import "./StaffLayout.css";
+import { Toaster } from "react-hot-toast";
 
 function StaffLayout() {
   const navigate = useNavigate();
@@ -13,6 +15,7 @@ function StaffLayout() {
   const [loaded, setLoaded] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState(null);
   const [deviceLoaded, setDeviceLoaded] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Role protection - only allow staff users
   useEffect(() => {
@@ -65,9 +68,18 @@ function StaffLayout() {
     return () => { mounted = false; };
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const handleLogoutConfirm = async () => {
+    setShowLogoutModal(false);
     await logout();
     navigate("/");
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutModal(false);
   };
 
   const linkState = (isActive) =>
@@ -77,6 +89,7 @@ function StaffLayout() {
 
   return (
     <div className={`staff-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+      <Toaster position="top-center" />
       {/* Sidebar */}
       <aside className="sidebar bg-dark text-white">
         <div className="sidebar-header d-flex align-items-center justify-content-between">
@@ -100,8 +113,6 @@ function StaffLayout() {
               <span className="label">Dashboard</span>
             </NavLink>
           </li>
-
-          <li className="nav-item mt-2 small text-uppercase text-secondary ps-3">Appointments</li>
 
           <li className="nav-item">
             <NavLink
@@ -199,8 +210,6 @@ function StaffLayout() {
             </NavLink>
           </li>
 
-          <li className="nav-item mt-2 small text-uppercase text-secondary ps-3">Patient Management</li>
-
           <li className="nav-item">
             <NavLink
               to="/staff/patient-binding"
@@ -238,7 +247,6 @@ function StaffLayout() {
             </>
           )}
 
-          <li className="nav-item mt-2 small text-uppercase text-secondary ps-3">Account</li>
           <li className="nav-item">
             <NavLink to="/staff/profile" className={({ isActive }) => linkState(isActive)}>
               <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -247,19 +255,20 @@ function StaffLayout() {
               <span className="label">Account</span>
             </NavLink>
           </li>
-
-          <li className="nav-item mt-4 px-3">
-            <button
-              className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center icon-only-btn"
-              onClick={handleLogout}
-              title="Logout"
-              aria-label="Logout"
-            >
-              <i className="bi-box-arrow-right fs-5"></i>
-              <span className="visually-hidden">Logout</span>
-            </button>
-          </li>
         </ul>
+
+        {/* Logout button - fixed at bottom */}
+        <div className="sidebar-footer">
+          <button
+            className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center icon-only-btn"
+            onClick={handleLogoutClick}
+            title="Logout"
+            aria-label="Logout"
+          >
+            <i className="bi-box-arrow-right fs-5"></i>
+            <span className="visually-hidden">Logout</span>
+          </button>
+        </div>
       </aside>
 
       {/* Right side */}
@@ -283,6 +292,16 @@ function StaffLayout() {
       <div
         className={`sidebar-overlay ${sidebarOpen ? "show" : ""}`}
         onClick={() => setSidebarOpen(false)}
+      />
+      <ConfirmationModal
+        show={showLogoutModal}
+        onConfirm={handleLogoutConfirm}
+        onCancel={handleLogoutCancel}
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You will need to login again to access your account."
+        confirmText="Logout"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );

@@ -11,6 +11,7 @@
 .staff-shell .sidebar{
   width: 260px;
   height: 100vh;
+  max-height: 100vh;
   position: fixed;
   top: 0;
   left: 0;
@@ -36,30 +37,32 @@
   background: #0f1821;
   border-bottom: 1px solid rgba(255,255,255,.08);
   flex-shrink: 0;
+  flex-grow: 0;
   min-height: 70px;
   display: flex;
   align-items: center;
+  /* Prevent horizontal scrolling */
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 /* Scroll area */
 .staff-shell .nav-scroller{
-  padding: .5rem .25rem 0 .25rem;
+  padding: .5rem .25rem .5rem .25rem;
   overflow-y: auto;
   overflow-x: hidden;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  max-height: 100%;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.3) transparent;
   display: flex;
   flex-direction: column;
   position: relative;
-  /* Ensure scrolling is always available */
-  overflow-y: auto;
-  /* Ensure proper height calculation */
-  height: calc(100vh - 70px);
-  max-height: calc(100vh - 70px);
-  /* Force scrollbar to always be visible when needed */
-  overflow: auto;
+  /* Prevent horizontal scrolling */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .staff-shell .nav-scroller::-webkit-scrollbar {
@@ -85,6 +88,19 @@
   background: rgba(255,255,255,0.8);
 }
 
+/* Ensure nav items don't cause horizontal overflow */
+.staff-shell .sidebar .nav-item {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.staff-shell .sidebar .nav {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* Links */
 .staff-shell .sidebar .nav-link{
   color: rgba(255,255,255,.9);
@@ -96,6 +112,9 @@
   gap: .65rem;
   transition: background .15s ease, color .15s ease;
   text-decoration: none;
+  /* Prevent horizontal overflow */
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .staff-shell .sidebar .nav-link:hover{
@@ -112,6 +131,15 @@
 .staff-shell .sidebar .icon{
   width: 1.5rem;
   text-align: center;
+  flex-shrink: 0;
+}
+
+.staff-shell .sidebar .label{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 /* Content area (white) */
@@ -145,6 +173,7 @@
   padding: .5rem .75rem;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
 }
 
 /* Staff main content area */
@@ -175,26 +204,48 @@
   align-items: center;
 }
 
-/* Logout button positioning */
-.staff-shell .nav .nav-item.mt-4.px-3 {
-  margin-top: auto !important;
-  padding-top: 1rem !important;
-  padding-bottom: 0.75rem !important;
-  border-top: 1px solid rgba(255,255,255,.08);
-  flex-shrink: 0;
-  margin-bottom: 0 !important;
+/* Notification bell styling for light background */
+.staff-shell .topbar .notification-bell-btn {
+  background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%) !important;
+  border: none !important;
+  color: white !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 0.75rem !important;
+  transition: all 0.3s ease !important;
 }
 
+.staff-shell .topbar .notification-bell-btn:hover {
+  background: linear-gradient(135deg, #0096c7 0%, #0056b3 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 119, 182, 0.3) !important;
+}
+
+.staff-shell .topbar .notification-bell-btn svg {
+  color: white !important;
+}
+
+/* Sidebar footer (logout button) */
+.staff-shell .sidebar-footer {
+  flex-shrink: 0;
+  flex-grow: 0;
+  padding: 0.75rem 0.75rem 0.75rem 0.75rem;
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: #121a23;
+  /* Prevent horizontal scrolling */
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
 
 /* Logout button styling */
-.staff-shell .nav .nav-item.mt-4.px-3 .btn {
+.staff-shell .sidebar-footer .btn {
   border-radius: 8px !important;
   padding: 0.75rem 1rem !important;
   font-weight: 500 !important;
   transition: all 0.2s ease !important;
 }
 
-.staff-shell .nav .nav-item.mt-4.px-3 .btn:hover {
+.staff-shell .sidebar-footer .btn:hover {
   background-color: rgba(220, 53, 69, 0.1) !important;
   border-color: #dc3545 !important;
   transform: translateY(-1px);

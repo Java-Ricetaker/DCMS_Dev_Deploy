@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 function ClinicCalendarManager() {
   const [entries, setEntries] = useState([]);
@@ -48,7 +49,7 @@ function ClinicCalendarManager() {
           setNewOpenTime(data.open_time ?? "");
           setNewCloseTime(data.close_time ?? "");
           setNewNote(data.note ?? "");
-          alert("⚠️ This date already has an override. You are editing it.");
+          toast("⚠️ This date already has an override. You are editing it.", { icon: "⚠️" });
         } else {
           setExistingOverride(null);
           setNewIsOpen(!!data.is_open);
@@ -90,7 +91,7 @@ function ClinicCalendarManager() {
       fetchEntries();
     } catch (err) {
       console.error("Failed to add/update entry", err);
-      alert("Failed to save entry. Maybe the date already exists?");
+      toast.error("Failed to save entry. Maybe the date already exists?");
     }
   };
 
@@ -118,7 +119,7 @@ function ClinicCalendarManager() {
       fetchEntries();
     } catch (err) {
       console.error("Failed to update entry", err);
-      alert("Update failed.");
+      toast.error("Update failed.");
     }
   };
 
@@ -132,7 +133,7 @@ function ClinicCalendarManager() {
       fetchEntries();
     } catch (err) {
       console.error("Failed to delete entry", err);
-      alert("Deletion failed.");
+      toast.error("Deletion failed.");
     }
   };
 

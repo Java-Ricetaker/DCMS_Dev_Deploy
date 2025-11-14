@@ -2,6 +2,7 @@ import { useState } from "react";
 import api from "../../api/api";
 import LoadingSpinner from "../LoadingSpinner";
 import ToothChart from "./ToothChart";
+import toast from "react-hot-toast";
 
 function VisitCodeInput() {
   const [code, setCode] = useState("");
@@ -65,7 +66,7 @@ function VisitCodeInput() {
         handleReset();
       }
     } catch (err) {
-      alert("Failed to save notes: " + (err.response?.data?.message || "Unknown error"));
+      toast.error("Failed to save notes: " + (err.response?.data?.message || "Unknown error"));
     } finally {
       setSaving(false);
     }

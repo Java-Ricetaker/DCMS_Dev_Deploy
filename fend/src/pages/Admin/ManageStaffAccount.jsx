@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 const ManageStaffAccount = () => {
   const [activeTab, setActiveTab] = useState("create");
@@ -18,7 +19,6 @@ const ManageStaffAccount = () => {
     password: "",
     password_confirmation: "",
   });
-  const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState({});
 
   // Fetch staff accounts
@@ -79,12 +79,26 @@ const ManageStaffAccount = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(null);
     setErrors({});
 
     try {
       const res = await api.post("/api/admin/staff", form);
-      setMessage("✅ Staff account created successfully!");
+      toast.success("Staff account created successfully!", {
+        duration: 4000,
+        position: "top-center",
+        style: {
+          background: '#28a745',
+          color: '#ffffff',
+          borderRadius: '8px',
+          padding: '14px 20px',
+          fontSize: '15px',
+          fontWeight: '500',
+        },
+        iconTheme: {
+          primary: '#ffffff',
+          secondary: '#28a745',
+        },
+      });
       setForm({
         name: "",
         email: "",
@@ -98,8 +112,43 @@ const ManageStaffAccount = () => {
     } catch (err) {
       if (err.response?.data?.errors) {
         setErrors(err.response.data.errors);
+        // Show first error as toast
+        const firstError = Object.values(err.response.data.errors)[0];
+        if (firstError && firstError[0]) {
+          toast.error(firstError[0], {
+            duration: 4000,
+            position: "top-center",
+            style: {
+              background: '#dc3545',
+              color: '#ffffff',
+              borderRadius: '8px',
+              padding: '14px 20px',
+              fontSize: '15px',
+              fontWeight: '500',
+            },
+            iconTheme: {
+              primary: '#ffffff',
+              secondary: '#dc3545',
+            },
+          });
+        }
       } else {
-        setMessage("❌ Something went wrong.");
+        toast.error("Something went wrong. Please try again.", {
+          duration: 4000,
+          position: "top-center",
+          style: {
+            background: '#dc3545',
+            color: '#ffffff',
+            borderRadius: '8px',
+            padding: '14px 20px',
+            fontSize: '15px',
+            fontWeight: '500',
+          },
+          iconTheme: {
+            primary: '#ffffff',
+            secondary: '#dc3545',
+          },
+        });
       }
     }
   };
@@ -111,10 +160,40 @@ const ManageStaffAccount = () => {
 
     try {
       await api.post(`/api/admin/staff/${staffId}/toggle-status`);
-      setMessage(`✅ Staff account ${currentStatus === 'activated' ? 'deactivated' : 'activated'} successfully!`);
+      toast.success(`Staff account ${currentStatus === 'activated' ? 'deactivated' : 'activated'} successfully!`, {
+        duration: 4000,
+        position: "top-center",
+        style: {
+          background: '#28a745',
+          color: '#ffffff',
+          borderRadius: '8px',
+          padding: '14px 20px',
+          fontSize: '15px',
+          fontWeight: '500',
+        },
+        iconTheme: {
+          primary: '#ffffff',
+          secondary: '#28a745',
+        },
+      });
       fetchStaffAccounts(currentPage, searchTerm);
     } catch (err) {
-      setMessage("❌ Failed to update staff account status.");
+      toast.error("Failed to update staff account status. Please try again.", {
+        duration: 4000,
+        position: "top-center",
+        style: {
+          background: '#dc3545',
+          color: '#ffffff',
+          borderRadius: '8px',
+          padding: '14px 20px',
+          fontSize: '15px',
+          fontWeight: '500',
+        },
+        iconTheme: {
+          primary: '#ffffff',
+          secondary: '#dc3545',
+        },
+      });
     }
   };
 
@@ -151,19 +230,7 @@ const ManageStaffAccount = () => {
   };
 
   return (
-    <div 
-      className="manage-staff-page"
-      style={{
-        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-        minHeight: '100vh',
-        width: '100vw',
-        position: 'relative',
-        left: 0,
-        right: 0,
-        padding: '1.5rem 2rem',
-        boxSizing: 'border-box'
-      }}
-    >
+    <div className="manage-staff-page">
       {/* Header Section */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
@@ -174,22 +241,6 @@ const ManageStaffAccount = () => {
           <p className="text-muted mb-0 mt-1">Create new staff accounts and manage existing ones</p>
         </div>
       </div>
-
-      {/* Message Display */}
-      {message && (
-        <div className={`alert ${message.includes('✅') ? 'alert-success' : 'alert-danger'} alert-dismissible fade show`} role="alert">
-          <div className="d-flex align-items-center">
-            <span className="me-2">ℹ️</span>
-            {message}
-          </div>
-          <button
-            type="button"
-            className="btn-close"
-            onClick={() => setMessage(null)}
-            aria-label="Close"
-          ></button>
-        </div>
-      )}
 
       {/* Tab Navigation */}
       <div className="card border-0 shadow-sm mb-4" style={{ borderRadius: '16px' }}>
@@ -348,8 +399,8 @@ const ManageStaffAccount = () => {
                 </h5>
                 
                 {/* Search Bar */}
-                <div className="d-flex gap-2">
-                  <div className="input-group" style={{ minWidth: '300px' }}>
+                <div className="d-flex gap-2 w-100" style={{ maxWidth: '100%' }}>
+                  <div className="input-group flex-grow-1" style={{ minWidth: '200px', maxWidth: '100%' }}>
                     <span className="input-group-text border-0 bg-light">
                       <i className="bi bi-search"></i>
                     </span>

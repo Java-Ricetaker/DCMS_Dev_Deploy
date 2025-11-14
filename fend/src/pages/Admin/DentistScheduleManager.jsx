@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 const EMP_TYPES = [
   { value: "full_time", label: "Full-time" },
@@ -60,7 +61,7 @@ export default function DentistScheduleManager() {
       setRows(res.data);
     } catch (err) {
       console.error(err);
-      alert("Failed to load dentists. Check admin auth and routes.");
+      toast.error("Failed to load dentists. Check admin auth and routes.");
     } finally {
       setLoading(false);
     }
@@ -144,17 +145,17 @@ export default function DentistScheduleManager() {
 
       if (editMode && form.id) {
         await api.put(`/api/dentists/${form.id}`, payload);
-        alert("Dentist updated.");
+        toast.success("Dentist updated.");
       } else {
         await api.post("/api/dentists", payload);
-        alert("Dentist created.");
+        toast.success("Dentist created.");
       }
       setShowModal(false);
       fetchRows();
     } catch (err) {
       const data = err?.response?.data;
       if (data?.errors) setErrors(data.errors);
-      else alert(data?.message || "Save failed");
+      else toast.error(data?.message || "Save failed");
     } finally {
       setSaving(false);
     }
@@ -164,10 +165,10 @@ export default function DentistScheduleManager() {
     if (!confirm(`Delete dentist ${row.dentist_code}? This cannot be undone.`)) return;
     try {
       await api.delete(`/api/dentists/${row.id}`);
-      alert("Deleted.");
+      toast.success("Deleted.");
       fetchRows();
     } catch (err) {
-      alert(err?.response?.data?.message || "Delete failed.");
+      toast.error(err?.response?.data?.message || "Delete failed.");
     }
   };
 
@@ -185,12 +186,12 @@ export default function DentistScheduleManager() {
     
     // Validate form
     if (!accountForm.email || !accountForm.email.trim()) {
-      alert("Email address is required.");
+      toast.error("Email address is required.");
       return;
     }
     
     if (!accountForm.name || !accountForm.name.trim()) {
-      alert("Full name is required.");
+      toast.error("Full name is required.");
       return;
     }
     
@@ -202,7 +203,7 @@ export default function DentistScheduleManager() {
         name: accountForm.name.trim(),
       });
       
-      alert(`Account created successfully! Temporary password: ${res.data.temporary_password}`);
+      toast.success(`Account created successfully! Temporary password: ${res.data.temporary_password}`);
       setShowAccountModal(false);
       fetchRows();
     } catch (err) {
@@ -211,9 +212,9 @@ export default function DentistScheduleManager() {
       
       if (validationErrors) {
         const errorList = Object.values(validationErrors).flat().join('\n');
-        alert(`Validation errors:\n${errorList}`);
+        toast.error(`Validation errors:\n${errorList}`);
       } else {
-        alert(errorMessage);
+        toast.error(errorMessage);
       }
     } finally {
       setAccountLoading(false);
@@ -222,7 +223,7 @@ export default function DentistScheduleManager() {
 
   const createDentistAccount = async (row) => {
     if (!row.email) {
-      alert(`Please add an email address for ${row.dentist_code} first.`);
+      toast.error(`Please add an email address for ${row.dentist_code} first.`);
       return;
     }
     
@@ -235,10 +236,10 @@ export default function DentistScheduleManager() {
         name: row.dentist_name || row.dentist_code,
       });
       
-      alert(`Account created successfully! Temporary password: ${res.data.temporary_password}`);
+      toast.success(`Account created successfully! Temporary password: ${res.data.temporary_password}`);
       fetchRows();
     } catch (err) {
-      alert(err?.response?.data?.message || "Failed to create account.");
+      toast.error(err?.response?.data?.message || "Failed to create account.");
     }
   };
 

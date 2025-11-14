@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 export default function ConsumeStockForm({ items = [], user = null, onConsumed }) {
   const isStaff = user?.role === "staff";
@@ -41,9 +42,9 @@ export default function ConsumeStockForm({ items = [], user = null, onConsumed }
       await api.post("/api/inventory/consume", payload);
       setForm((f) => ({ ...f, quantity: "", ref_id: "", notes: "" }));
       onConsumed?.();
-      alert("Stock consumed.");
+      toast.success("Stock consumed.");
     } catch (err) {
-      alert(err?.response?.data?.message || "Consume failed");
+      toast.error(err?.response?.data?.message || "Consume failed");
     }
   };
 

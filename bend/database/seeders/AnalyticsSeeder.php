@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Appointment;
 use App\Models\Patient;
+use App\Models\PatientMedicalHistory;
 use App\Models\PatientVisit;
 use App\Models\Payment;
 use App\Models\PerformanceGoal;
@@ -17,9 +18,12 @@ use App\Models\InventoryBatch;
 use App\Models\InventoryMovement;
 use App\Models\Supplier;
 use App\Models\VisitAdditionalCharge;
+use App\Models\DentistSchedule;
 use App\Services\ClinicDateResolverService;
+use Carbon\Carbon;
+use Database\Seeders\Support\RealisticVisitFactory;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class AnalyticsSeeder extends Seeder
@@ -29,8 +33,8 @@ class AnalyticsSeeder extends Seeder
      * 
      * This seeder respects the system's clinic schedule and visit flow:
      * - Only creates visits on days when clinic is open (via ClinicDateResolverService)
-     * - No pending visits are created (visits are resolved immediately)
-     * - Proper visit codes are generated for completed visits
+     * - Pending visits, completed visits, and inquiries follow the live workflow
+     * - Proper visit codes are generated where appropriate
      * - Appointments and visits are properly linked
      * - Payments are correctly linked to completed visits
      */
@@ -64,9 +68,11 @@ class AnalyticsSeeder extends Seeder
         $this->generatePerformanceGoals($adminUser, $startDate);
 
         // Generate monthly data
+        $visitFactory = new RealisticVisitFactory($adminUser);
+
         $current = $startDate->copy();
         while ($current->lte($endDate)) {
-            $this->generateMonthData($current, $patients, $services, $adminUser);
+            $this->generateMonthData($current, $patients, $services, $visitFactory);
             $this->generateInventoryLoss($current, $adminUser);
             $current->addMonth();
         }
@@ -89,6 +95,8 @@ class AnalyticsSeeder extends Seeder
         InventoryItem::truncate();
         Payment::truncate();
         PatientVisit::truncate();
+        VisitNote::truncate();
+        PatientMedicalHistory::truncate();
         Appointment::truncate();
         GoalProgressSnapshot::truncate();
         PerformanceGoal::truncate();
@@ -96,9 +104,9 @@ class AnalyticsSeeder extends Seeder
         DB::statement('SET FOREIGN_KEY_CHECKS=1;');
     }
 
-    private function ensurePatients(): array
+    private function ensurePatients(): EloquentCollection
     {
-        $patients = Patient::all();
+        $patients = Patient::with('user')->get();
         
         if ($patients->count() < 50) {
             $this->command->info('Generating additional patients for analytics...');
@@ -122,15 +130,15 @@ class AnalyticsSeeder extends Seeder
             }
             
             Patient::insert($newPatients);
-            $patients = Patient::all();
+            $patients = Patient::with('user')->get();
         }
         
-        return $patients->pluck('id')->toArray();
+        return $patients;
     }
 
-    private function ensureServices(): array
+    private function ensureServices(): EloquentCollection
     {
-        $services = Service::all();
+        $services = Service::where('is_active', true)->get();
         
         if ($services->count() < 10) {
             $this->command->info('Generating additional services for analytics...');
@@ -167,10 +175,10 @@ class AnalyticsSeeder extends Seeder
                 ]));
             }
             
-            $services = Service::all();
+            $services = Service::where('is_active', true)->get();
         }
         
-        return $services->pluck('id')->toArray();
+        return $services;
     }
 
     private function generatePerformanceGoals(User $adminUser, Carbon $startDate): void
@@ -274,159 +282,99 @@ class AnalyticsSeeder extends Seeder
         }
     }
 
-    private function generateMonthData(Carbon $month, array $patients, array $services, User $adminUser): void
+    private function generateMonthData(
+        Carbon $month,
+        EloquentCollection $patients,
+        EloquentCollection $services,
+        RealisticVisitFactory $visitFactory
+    ): void
     {
         $this->command->info("Generating data for {$month->format('Y-m')}...");
-        
+
         $startOfMonth = $month->copy()->startOfMonth();
         $endOfMonth = $month->copy()->endOfMonth();
         $daysInMonth = $startOfMonth->daysInMonth;
-        
-        $visitRows = [];
-        $appointmentRows = [];
-        $paymentRows = [];
-        
+        $resolver = app(ClinicDateResolverService::class);
+
+        $visitCount = 0;
+        $appointmentCount = 0;
+        $paymentCount = 0;
+
         // Generate data for each day
         for ($day = 1; $day <= $daysInMonth; $day++) {
             $currentDay = $startOfMonth->copy()->addDays($day - 1);
-            
+
             // Skip current day and future dates (only generate past dates)
             if ($currentDay->isToday() || $currentDay->isFuture()) {
                 continue;
             }
-            
-            // Get clinic capacity for this day using the system's date resolver
-            $resolver = app(ClinicDateResolverService::class);
+
             $snap = $resolver->resolve($currentDay);
-            
-            // Only generate visits on days when clinic is actually open
+
             if (!$snap['is_open']) {
-                continue; // Skip if clinic is closed according to system configuration
+                continue;
             }
-            
-            $capacity = (int) $snap['effective_capacity'];
+
+            if (empty($snap['open_time']) || empty($snap['close_time'])) {
+                continue;
+            }
+
+            $capacity = max(1, (int) $snap['effective_capacity']);
             $grid = ClinicDateResolverService::buildBlocks($snap['open_time'], $snap['close_time']);
-            
-            // Track capacity usage per time slot
+
+            if (empty($grid)) {
+                continue;
+            }
+
             $slotUsage = array_fill_keys($grid, 0);
-            
-            // Generate visits for the day, respecting capacity limits
-            $maxVisitsToday = min(25, $capacity * count($grid) * 0.8); // Max 80% of total capacity
-            $visitsToday = min($this->getDailyVisitCount($currentDay), $maxVisitsToday);
-            
-            for ($i = 0; $i < $visitsToday; $i++) {
-                $patientId = $patients[array_rand($patients)];
-                $serviceId = $services[array_rand($services)];
-                
-                // Generate realistic time slots that respect capacity
-                $timeSlot = $this->generateTimeSlotWithCapacity($currentDay, $slotUsage, $capacity, $grid);
-                if (!$timeSlot) {
-                    // No available slots, skip this visit
+            $activeDentists = $this->resolveDentistsForDay($currentDay, $snap);
+
+            $maxVisitsToday = min(25, (int) round($capacity * count($grid) * 0.85));
+            $targetVisits = min($this->getDailyVisitCount($currentDay), $maxVisitsToday);
+
+            if ($targetVisits <= 0) {
+                continue;
+            }
+
+            $attempts = 0;
+            $createdToday = 0;
+
+            while ($createdToday < $targetVisits && $attempts < $targetVisits * 3) {
+                $attempts++;
+                $result = $visitFactory->createVisitForDay(
+                    $currentDay,
+                    $patients,
+                    $services,
+                    $activeDentists,
+                    $slotUsage,
+                    $grid,
+                    $capacity
+                );
+
+                if (!$result['visit']) {
                     continue;
                 }
-                
-                $startTime = $timeSlot['start'];
-                $endTime = $timeSlot['end'];
-                
-                // Update slot usage
-                $this->updateSlotUsage($slotUsage, $timeSlot['slot'], $grid);
-                
-                // Determine visit status
-                $status = $this->getVisitStatus($currentDay);
-                
-                // Generate visit code for completed visits (as they would have been processed)
-                $visitCode = null;
-                if ($status === 'completed') {
-                    $visitCode = PatientVisit::generateVisitCode();
+
+                $createdToday++;
+                $visitCount++;
+                if ($result['appointment']) {
+                    $appointmentCount++;
                 }
-                
-                // Create visit
-                $visitData = [
-                    'patient_id' => $patientId,
-                    'service_id' => $serviceId,
-                    'visit_date' => $currentDay->toDateString(),
-                    'start_time' => $startTime->toDateTimeString(),
-                    'end_time' => $endTime->toDateTimeString(),
-                    'status' => $status,
-                    'visit_code' => $visitCode,
-                    'is_seeded' => true,
-                    'created_at' => now()->toDateTimeString(),
-                    'updated_at' => now()->toDateTimeString(),
-                ];
-                
-                $visitRows[] = $visitData;
-                
-                // Create appointment for 60% of visits (appointments should be created before visits)
-                if (rand(1, 100) <= 60) {
-                    $appointmentStatus = $this->getAppointmentStatus($status);
-                    $referenceCode = 'APT' . strtoupper(uniqid());
-                    
-                    $appointmentData = [
-                        'patient_id' => $patientId,
-                        'service_id' => $serviceId,
-                        'patient_hmo_id' => null,
-                        'date' => $currentDay->toDateString(),
-                        'time_slot' => $timeSlot['slot'],
-                        'reference_code' => $referenceCode,
-                        'status' => $appointmentStatus,
-                        'payment_method' => $this->getPaymentMethod(),
-                        'payment_status' => $this->getPaymentStatus($appointmentStatus),
-                        'notes' => $this->generateAppointmentNote(),
-                        'is_seeded' => true,
-                        'created_at' => $startTime->toDateTimeString(),
-                        'updated_at' => $startTime->toDateTimeString(),
-                    ];
-                    
-                    $appointmentRows[] = $appointmentData;
-                    
-                    // If appointment was completed, clear the reference code (as per system logic)
-                    if ($appointmentStatus === 'completed') {
-                        $appointmentData['reference_code'] = null;
-                    }
-                }
-                
-                // Create payment for completed visits
-                if ($status === 'completed') {
-                    $service = Service::find($serviceId);
-                    $amount = $service ? $service->price : 2000;
-                    
-                    $paymentData = [
-                        'appointment_id' => null,
-                        'patient_visit_id' => null, // Will be updated after visit creation
-                        'currency' => 'PHP',
-                        'amount_due' => $amount,
-                        'amount_paid' => $amount,
-                        'method' => $this->getPaymentMethod(),
-                        'status' => 'paid',
-                        'reference_no' => 'PAY' . strtoupper(uniqid()),
-                        'paid_at' => $endTime->toDateTimeString(),
-                        'created_by' => $adminUser->id,
-                        'created_at' => $endTime->toDateTimeString(),
-                        'updated_at' => $endTime->toDateTimeString(),
-                    ];
-                    
-                    $paymentRows[] = $paymentData;
+                if ($result['payment']) {
+                    $paymentCount++;
                 }
             }
         }
-        
-        // Bulk insert visits
-        foreach (array_chunk($visitRows, 1000) as $chunk) {
-            PatientVisit::insert($chunk);
-        }
-        
-        // Create visit notes for visits that need them
-        $this->createVisitNotes();
-        
-        // Bulk insert appointments
-        foreach (array_chunk($appointmentRows, 1000) as $chunk) {
-            Appointment::insert($chunk);
-        }
-        
-        // Create payments and link them to visits after visits are created
-        $this->createPaymentsForVisits($paymentRows, $startOfMonth, $endOfMonth);
-        
-        $this->command->info("Generated {$month->format('Y-m')}: " . count($visitRows) . " visits, " . count($appointmentRows) . " appointments");
+
+        $this->command->info(
+            sprintf(
+                "Generated %s: %d visits, %d appointments, %d payments",
+                $month->format('Y-m'),
+                $visitCount,
+                $appointmentCount,
+                $paymentCount
+            )
+        );
     }
 
     private function getDailyVisitCount(Carbon $day): int
@@ -451,214 +399,6 @@ class AnalyticsSeeder extends Seeder
         }
         
         return rand($baseCount - 5, $baseCount + 10);
-    }
-
-    private function generateTimeSlot(Carbon $day): array
-    {
-        // Clinic hours: 8 AM to 6 PM, excluding lunch time (12:00 PM to 1:00 PM)
-        $hour = rand(8, 17);
-        
-        // Skip lunch time (12:00 PM to 1:00 PM)
-        if ($hour >= 12 && $hour < 13) {
-            // If we hit lunch time, move to 1:00 PM or later
-            $hour = 13;
-        }
-        
-        $minute = [0, 15, 30, 45][array_rand([0, 1, 2, 3])];
-        
-        $start = $day->copy()->setTime($hour, $minute, 0);
-        $duration = rand(20, 120); // 20 minutes to 2 hours
-        $end = $start->copy()->addMinutes($duration);
-        
-        return [
-            'start' => $start,
-            'end' => $end,
-            'slot' => sprintf('%02d:%02d-%02d:%02d', $hour, $minute, $end->hour, $end->minute),
-        ];
-    }
-
-    private function generateTimeSlotWithCapacity(Carbon $day, array $slotUsage, int $capacity, array $grid): ?array
-    {
-        // Try to find an available slot
-        $attempts = 0;
-        $maxAttempts = count($grid) * 2; // Try twice as many times as available slots
-        
-        while ($attempts < $maxAttempts) {
-            $slot = $grid[array_rand($grid)];
-            [$hour, $minute] = array_map('intval', explode(':', $slot));
-            
-            $start = $day->copy()->setTime($hour, $minute, 0);
-            $duration = rand(20, 120); // 20 minutes to 2 hours
-            $end = $start->copy()->addMinutes($duration);
-            
-            // Check if this slot and duration fits within capacity
-            if ($this->canFitInSlot($slotUsage, $slot, $duration, $capacity, $grid)) {
-                return [
-                    'start' => $start,
-                    'end' => $end,
-                    'slot' => sprintf('%02d:%02d-%02d:%02d', $hour, $minute, $end->hour, $end->minute),
-                ];
-            }
-            
-            $attempts++;
-        }
-        
-        return null; // No available slot found
-    }
-
-    private function canFitInSlot(array $slotUsage, string $startSlot, int $duration, int $capacity, array $grid): bool
-    {
-        $startTime = Carbon::createFromFormat('H:i', $startSlot);
-        $endTime = $startTime->copy()->addMinutes($duration);
-        
-        // Check each 30-minute block that this appointment would occupy
-        $current = $startTime->copy();
-        while ($current->lt($endTime)) {
-            $slotKey = $current->format('H:i');
-            
-            // If slot doesn't exist in grid or is already at capacity, can't fit
-            if (!array_key_exists($slotKey, $slotUsage) || $slotUsage[$slotKey] >= $capacity) {
-                return false;
-            }
-            
-            $current->addMinutes(30);
-        }
-        
-        return true;
-    }
-
-    private function updateSlotUsage(array &$slotUsage, string $timeSlot, array $grid): void
-    {
-        if (strpos($timeSlot, '-') === false) return;
-        
-        [$start, $end] = explode('-', $timeSlot, 2);
-        $startTime = Carbon::createFromFormat('H:i', trim($start));
-        $endTime = Carbon::createFromFormat('H:i', trim($end));
-        
-        $current = $startTime->copy();
-        while ($current->lt($endTime)) {
-            $slotKey = $current->format('H:i');
-            if (array_key_exists($slotKey, $slotUsage)) {
-                $slotUsage[$slotKey]++;
-            }
-            $current->addMinutes(30);
-        }
-    }
-
-    private function getVisitStatus(Carbon $day): string
-    {
-        // 85% completed, 10% inquiry, 5% rejected
-        // No pending visits - they should be resolved immediately
-        $rand = rand(1, 100);
-        if ($rand <= 85) return 'completed';
-        if ($rand <= 95) return 'inquiry';
-        return 'rejected';
-    }
-
-    private function getAppointmentStatus(string $visitStatus): string
-    {
-        // Add a 7% chance of no-show for all appointments (regardless of visit status)
-        $rand = rand(1, 100);
-        if ($rand <= 7) { // 7% chance of no-show
-            return 'no_show';
-        }
-        
-        switch ($visitStatus) {
-            case 'completed':
-                return 'completed';
-            case 'inquiry':
-                return 'approved'; // Inquiry visits can still have approved appointments
-            case 'rejected':
-                return 'cancelled';
-            default:
-                return 'approved';
-        }
-    }
-
-    private function getPaymentMethod(): string
-    {
-        $methods = ['cash', 'maya', 'hmo'];
-        return $methods[array_rand($methods)];
-    }
-
-    private function getPaymentStatus(string $appointmentStatus): string
-    {
-        if ($appointmentStatus === 'completed') {
-            return rand(1, 100) <= 90 ? 'paid' : 'unpaid';
-        }
-        return 'unpaid';
-    }
-
-    private function generateVisitNote(string $status): ?string
-    {
-        if ($status === 'inquiry') {
-            $inquiryNotes = [
-                'Inquiry only: Patient inquired about services but did not proceed with treatment',
-                'Inquiry only: Patient asked about pricing and treatment options',
-                'Inquiry only: Patient inquired about available services',
-                'Inquiry only: Patient requested information only',
-                'Inquiry only: Patient consulted but did not book treatment',
-            ];
-            return $inquiryNotes[array_rand($inquiryNotes)];
-        }
-        
-        if ($status === 'rejected') {
-            $rejectedNotes = [
-                'Rejected: Patient left without treatment',
-                'Rejected: Human error',
-                'Rejected: Line too long',
-                'Rejected: Patient cancelled',
-            ];
-            return $rejectedNotes[array_rand($rejectedNotes)];
-        }
-        
-        // Default notes for completed/pending visits
-        $notes = [
-            'Regular checkup completed',
-            'Treatment successful',
-            'Patient satisfied with service',
-            'Follow-up scheduled',
-            'Additional treatment recommended',
-            null,
-            null,
-            null,
-        ];
-        
-        return $notes[array_rand($notes)];
-    }
-
-    private function generateAppointmentNote(): ?string
-    {
-        $notes = [
-            'Patient confirmed appointment',
-            'Reminder sent',
-            'Walk-in patient',
-            'Emergency appointment',
-            null,
-            null,
-            null,
-        ];
-        
-        return $notes[array_rand($notes)];
-    }
-
-    private function createPaymentsForVisits(array $paymentRows, Carbon $startOfMonth, Carbon $endOfMonth): void
-    {
-        // Get completed visits for the month, ordered by creation time to match payment rows
-        $visits = PatientVisit::whereBetween('start_time', [$startOfMonth, $endOfMonth])
-            ->where('status', 'completed')
-            ->orderBy('created_at', 'asc')
-            ->get();
-        
-        // Create payments for each completed visit
-        foreach ($visits as $index => $visit) {
-            if ($index < count($paymentRows)) {
-                $paymentData = $paymentRows[$index];
-                $paymentData['patient_visit_id'] = $visit->id;
-                
-                Payment::create($paymentData);
-            }
-        }
     }
 
     private function generateGoalProgressSnapshots(Carbon $startDate, Carbon $endDate): void
@@ -717,34 +457,6 @@ class AnalyticsSeeder extends Seeder
                 
             default:
                 return 0;
-        }
-    }
-
-    private function createVisitNotes(): void
-    {
-        // Get all visits that need notes (inquiry status, completed visits, or rejected visits)
-        $visits = PatientVisit::whereIn('status', ['inquiry', 'completed', 'rejected'])
-            ->whereDoesntHave('visitNotes')
-            ->get();
-        
-        foreach ($visits as $visit) {
-            $noteContent = $this->generateVisitNote($visit->status);
-            
-            // Only create notes if there's actual content
-            if ($noteContent || $visit->status === 'completed') {
-                VisitNote::create([
-                    'patient_visit_id' => $visit->id,
-                    'dentist_notes_encrypted' => $noteContent,
-                    'findings_encrypted' => $visit->status === 'completed' ? 'Patient examination completed successfully.' : null,
-                    'treatment_plan_encrypted' => $visit->status === 'completed' ? 'Follow-up recommended in 6 months.' : null,
-                    'created_by' => null,
-                    'updated_by' => null,
-                    'last_accessed_at' => null,
-                    'last_accessed_by' => null,
-                    'created_at' => $visit->created_at,
-                    'updated_at' => $visit->updated_at,
-                ]);
-            }
         }
     }
 
@@ -950,5 +662,18 @@ class AnalyticsSeeder extends Seeder
             $batch->qty_on_hand -= $lossQuantity;
             $batch->save();
         }
+    }
+
+    private function resolveDentistsForDay(Carbon $day, array $snap): EloquentCollection
+    {
+        $ids = collect($snap['active_dentist_ids'] ?? [])
+            ->filter()
+            ->values();
+
+        if ($ids->isNotEmpty()) {
+            return DentistSchedule::whereIn('id', $ids)->get();
+        }
+
+        return DentistSchedule::activeOnDate($day)->get();
     }
 }

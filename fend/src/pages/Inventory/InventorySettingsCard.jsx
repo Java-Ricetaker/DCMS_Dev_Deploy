@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 export default function InventorySettingsCard() {
   const [loading, setLoading] = useState(true);
@@ -26,9 +27,9 @@ export default function InventorySettingsCard() {
     setSaving(true);
     try {
       await api.patch("/api/inventory/settings", form);
-      alert("Settings saved.");
+      toast.success("Settings saved.");
     } catch (e) {
-      alert(e?.response?.data?.message || "Save failed");
+      toast.error(e?.response?.data?.message || "Save failed");
     } finally {
       setSaving(false);
     }

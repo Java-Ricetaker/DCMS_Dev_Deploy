@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/api';
 import './PatientManager.css';
+import toast from 'react-hot-toast';
 
 const PatientManager = () => {
   const [patients, setPatients] = useState([]);
@@ -132,20 +133,20 @@ const PatientManager = () => {
       }
 
       if (response.data.success) {
-        alert(response.data.message);
+        toast.success(response.data.message);
         fetchPatients();
         fetchStatistics();
         setShowModal(false);
       } else {
-        alert(response.data.message || 'Action failed');
+        toast.error(response.data.message || 'Action failed');
       }
     } catch (err) {
       // Show validation errors if available
       if (err.response?.data?.errors) {
         const errors = Object.values(err.response.data.errors).flat().join('\n');
-        alert(`Validation failed:\n${errors}`);
+        toast.error(`Validation failed:\n${errors}`);
       } else {
-        alert(err.response?.data?.message || 'Action failed');
+        toast.error(err.response?.data?.message || 'Action failed');
       }
       console.error('Error performing action:', err);
     }

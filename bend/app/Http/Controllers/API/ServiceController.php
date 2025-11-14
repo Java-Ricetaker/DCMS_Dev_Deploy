@@ -14,7 +14,12 @@ class ServiceController extends Controller
      */
     public function index()
     {
-        return response()->json(Service::with(['bundledServices', 'bundleItems', 'category'])->get());
+        return response()->json(Service::with([
+            'bundledServices',
+            'bundleItems',
+            'category',
+            'followUpParent',
+        ])->get());
     }
 
     /**
@@ -34,10 +39,31 @@ class ServiceController extends Controller
             'estimated_minutes' => 'required|integer|min:1',
             'bundled_service_ids' => 'array',
             'bundled_service_ids.*' => 'exists:services,id',
+            'is_follow_up' => 'boolean',
+            'follow_up_parent_service_id' => [
+                'nullable',
+                'integer',
+                'exists:services,id',
+            ],
+            'follow_up_max_gap_weeks' => 'nullable|integer|min:0',
         ]);
 
         // Round up estimated time to nearest 30 mins
         $validated['estimated_minutes'] = ceil($validated['estimated_minutes'] / 30) * 30;
+
+        if (($validated['is_follow_up'] ?? false) && empty($validated['follow_up_parent_service_id'])) {
+            return response()->json([
+                'message' => 'Follow-up services require selecting a parent service.',
+                'errors' => [
+                    'follow_up_parent_service_id' => ['Follow-up services require selecting a parent service.'],
+                ],
+            ], 422);
+        }
+
+        if (!($validated['is_follow_up'] ?? false)) {
+            $validated['follow_up_parent_service_id'] = null;
+            $validated['follow_up_max_gap_weeks'] = null;
+        }
 
         $service = Service::create($validated);
 
@@ -61,7 +87,7 @@ class ServiceController extends Controller
             ]
         );
 
-        return response()->json($service->load(['bundledServices', 'bundleItems', 'category']), 201);
+        return response()->json($service->load(['bundledServices', 'bundleItems', 'category', 'followUpParent']), 201);
     }
 
     /**
@@ -69,7 +95,7 @@ class ServiceController extends Controller
      */
     public function show(string $id)
     {
-        return response()->json(Service::with(['bundledServices', 'bundleItems', 'category'])->findOrFail($id));
+        return response()->json(Service::with(['bundledServices', 'bundleItems', 'category', 'followUpParent'])->findOrFail($id));
     }
 
     /**
@@ -91,6 +117,13 @@ class ServiceController extends Controller
             'estimated_minutes' => 'sometimes|required|integer|min:1',
             'bundled_service_ids' => 'array',
             'bundled_service_ids.*' => 'exists:services,id',
+            'is_follow_up' => 'boolean',
+            'follow_up_parent_service_id' => [
+                'nullable',
+                'integer',
+                'exists:services,id',
+            ],
+            'follow_up_max_gap_weeks' => 'nullable|integer|min:0',
         ]);
 
         if (isset($validated['estimated_minutes'])) {
@@ -102,6 +135,35 @@ class ServiceController extends Controller
             'price' => $service->price,
             'estimated_minutes' => $service->estimated_minutes
         ];
+
+        $shouldBeFollowUp = $validated['is_follow_up'] ?? $service->is_follow_up;
+        $parentServiceId = $validated['follow_up_parent_service_id'] ?? $service->follow_up_parent_service_id;
+
+        if ($shouldBeFollowUp && !$parentServiceId) {
+            return response()->json([
+                'message' => 'Follow-up services require selecting a parent service.',
+                'errors' => [
+                    'follow_up_parent_service_id' => ['Follow-up services require selecting a parent service.'],
+                ],
+            ], 422);
+        }
+
+        if (array_key_exists('is_follow_up', $validated) && !$validated['is_follow_up']) {
+            $validated['follow_up_parent_service_id'] = null;
+            $validated['follow_up_max_gap_weeks'] = null;
+        }
+
+        if (
+            $shouldBeFollowUp === true &&
+            $parentServiceId === $service->id
+        ) {
+            return response()->json([
+                'message' => 'A follow-up service must reference a different parent service.',
+                'errors' => [
+                    'follow_up_parent_service_id' => ['A follow-up service must reference a different parent service.'],
+                ],
+            ], 422);
+        }
 
         $service->update($validated);
 
@@ -128,7 +190,7 @@ class ServiceController extends Controller
             ]
         );
 
-        return response()->json($service->load(['bundledServices', 'bundleItems', 'category']));
+        return response()->json($service->load(['bundledServices', 'bundleItems', 'category', 'followUpParent']));
     }
 
     /**

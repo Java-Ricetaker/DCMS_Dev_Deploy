@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/api';
+import toast from 'react-hot-toast';
 
 export default function TimeBlockModal({ show, onClose }) {
   const [loading, setLoading] = useState(false);
@@ -18,7 +19,7 @@ export default function TimeBlockModal({ show, onClose }) {
       setData(res.data);
     } catch (err) {
       console.error('Failed to fetch time blocks:', err);
-      alert('Failed to load time blocks');
+      toast.error('Failed to load time blocks');
     } finally {
       setLoading(false);
     }

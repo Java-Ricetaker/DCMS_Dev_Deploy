@@ -581,59 +581,74 @@ class AppointmentController extends Controller
 
     public function sendReminder(Request $request, $id)
     {
-        $appointment = Appointment::with('patient.user', 'service')->findOrFail($id);
+        return DB::transaction(function () use ($request, $id) {
+            // Use lockForUpdate() to acquire a row-level lock, preventing concurrent access
+            $appointment = Appointment::with('patient.user', 'service')
+                ->where('id', $id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $d1 = now()->addDays(1)->toDateString();
-        $d2 = now()->addDays(2)->toDateString();
+            $d1 = now()->addDays(1)->toDateString();
+            $d2 = now()->addDays(2)->toDateString();
 
-        if (
-            $appointment->status !== 'approved' ||
-            !in_array($appointment->date, [$d1, $d2], true) ||   // ⬅ allow +1 or +2
-            $appointment->reminded_at !== null
-        ) {
-            return response()->json(['message' => 'Not eligible for reminder.'], 422);
-        }
+            // Check eligibility (status, date, and reminded_at)
+            if (
+                $appointment->status !== 'approved' ||
+                !in_array($appointment->date, [$d1, $d2], true) ||   // ⬅ allow +1 or +2
+                $appointment->reminded_at !== null
+            ) {
+                return response()->json(['message' => 'Not eligible for reminder.'], 422);
+            }
 
-        $user = $appointment->patient->user;
-        if (!$user) {
-            return response()->json(['message' => 'Patient has no linked user account.'], 422);
-        }
+            $user = $appointment->patient->user;
+            if (!$user) {
+                return response()->json(['message' => 'Patient has no linked user account.'], 422);
+            }
 
-        // If you haven’t already added the helper:
-        $message = $request->input('message', '');
-        $edited = (bool) $request->input('edited', false);
+            // Prepare message and phone number
+            $message = $request->input('message', '');
+            $edited = (bool) $request->input('edited', false);
 
-        // Convert phone number to E.164 format if needed
-        $phoneNumber = $user->contact_number;
-        if ($phoneNumber && preg_match('/^09([0-9]{9})$/', $phoneNumber, $matches)) {
-            $phoneNumber = '+639' . $matches[1];
-        }
+            // Convert phone number to E.164 format if needed
+            $phoneNumber = $user->contact_number;
+            if ($phoneNumber && preg_match('/^09([0-9]{9})$/', $phoneNumber, $matches)) {
+                $phoneNumber = '+639' . $matches[1];
+            }
 
-        // send via logger (no real SMS)
-        NotificationService::send(
-            to: $phoneNumber,
-            subject: 'Dental Appointment Reminder',
-            message: $message
-        );
+            // Atomic update: set reminded_at only if it's currently null
+            // This ensures only the first concurrent request succeeds
+            $updated = Appointment::where('id', $id)
+                ->whereNull('reminded_at')
+                ->update(['reminded_at' => now()]);
 
-        $appointment->reminded_at = now();
-        $appointment->save();
+            // If update affected 0 rows, another request already sent the SMS
+            if ($updated === 0) {
+                return response()->json(['message' => 'Reminder already sent.'], 422);
+            }
 
-        if ($edited) {
-            // Log custom reminder
-            SystemLogService::logAppointment(
-                'reminder_sent_custom',
-                $appointment->id,
-                'Staff ' . Auth::user()->name . ' sent a custom reminder for appointment #' . $appointment->id,
-                [
-                    'appointment_id' => $appointment->id,
-                    'patient_id' => $appointment->patient_id,
-                    'custom_message' => $message
-                ]
+            // Send SMS only after successfully acquiring the lock and updating
+            NotificationService::send(
+                to: $phoneNumber,
+                subject: 'Dental Appointment Reminder',
+                message: $message
             );
-        }
 
-        return response()->json(['message' => 'Reminder sent.']);
+            if ($edited) {
+                // Log custom reminder
+                SystemLogService::logAppointment(
+                    'reminder_sent_custom',
+                    $appointment->id,
+                    'Staff ' . Auth::user()->name . ' sent a custom reminder for appointment #' . $appointment->id,
+                    [
+                        'appointment_id' => $appointment->id,
+                        'patient_id' => $appointment->patient_id,
+                        'custom_message' => $message
+                    ]
+                );
+            }
+
+            return response()->json(['message' => 'Reminder sent.']);
+        });
     }
 
 

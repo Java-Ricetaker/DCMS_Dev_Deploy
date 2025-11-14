@@ -45,6 +45,29 @@ class NotificationService
             return;
         }
 
+        // 3.5) Deduplication check: prevent sending duplicate SMS within a short time window
+        // This provides an additional safety layer beyond appointment-level checks
+        if ($to && $to !== 'N/A') {
+            $timeWindow = now()->subMinutes(5); // Check last 5 minutes
+            $similarMessage = NotificationLog::where('channel', 'sms')
+                ->where('to', $to)
+                ->whereIn('status', ['sent', 'pending'])
+                ->where('created_at', '>=', $timeWindow)
+                ->where(function ($query) use ($message) {
+                    // Check for similar messages (exact match or high similarity)
+                    $query->where('message', $message)
+                          ->orWhere('message', 'like', substr($message, 0, 50) . '%');
+                })
+                ->where('id', '!=', $log->id) // Exclude the current log
+                ->exists();
+
+            if ($similarMessage) {
+                $log->update(['status' => 'duplicate']);
+                Log::info("SMS duplicate prevented: {$subject} to {$to} (similar message sent within 5 minutes)");
+                return;
+            }
+        }
+
         // 4) Send via AWS SNS
         $sns = new SnsClient([
             'version'     => '2010-03-31',

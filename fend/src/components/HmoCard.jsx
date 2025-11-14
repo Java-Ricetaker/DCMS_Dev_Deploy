@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../api/api";
 import "./HmoCard.css";
+import toast from "react-hot-toast";
 
 /**
  * HmoCard.jsx
@@ -99,7 +100,7 @@ export default function HmoCard({
         return next;
       });
     } catch (e) {
-      alert(parseErr(e));
+      toast.error(parseErr(e));
     } finally {
       setConfirmDelete(null);
     }

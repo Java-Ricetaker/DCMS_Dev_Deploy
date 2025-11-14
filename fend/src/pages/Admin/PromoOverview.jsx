@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
+import toast from "react-hot-toast";
 
 export default function PromoOverview() {
   const [promos, setPromos] = useState([]);
@@ -29,7 +30,7 @@ export default function PromoOverview() {
         await loadPromos();
       } catch (err) {
         console.error("Failed to launch promo", err);
-        alert("Failed to launch promo: " + (err.response?.data?.message || "Unknown error"));
+        toast.error("Failed to launch promo: " + (err.response?.data?.message || "Unknown error"));
       }
     }
   };
@@ -41,7 +42,7 @@ export default function PromoOverview() {
         await loadPromos();
       } catch (err) {
         console.error("Failed to cancel promo", err);
-        alert("Failed to cancel promo: " + (err.response?.data?.message || "Unknown error"));
+        toast.error("Failed to cancel promo: " + (err.response?.data?.message || "Unknown error"));
       }
     }
   };

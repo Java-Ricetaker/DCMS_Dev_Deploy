@@ -11,30 +11,41 @@ export const addClinicHeader = async (doc, startY = 20) => {
     // Add logo to PDF (convert image to base64 and add)
     const logoBase64 = await convertImageToBase64(logo);
     
-    // Add logo image (32x32 pixels, positioned at top left)
-    doc.addImage(logoBase64, 'PNG', 20, startY, 32, 32);
+    // Calculate center position for logo and text
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const logoSize = 40; // Logo size in pixels
+    const logoX = (pageWidth - logoSize - 200) / 2; // Center logo, accounting for text width
     
-    // Add clinic name next to logo
-    doc.setFontSize(16);
+    // Add logo image (40x40 pixels, centered)
+    doc.addImage(logoBase64, 'PNG', logoX, startY, logoSize, logoSize);
+    
+    // Add clinic name next to logo (centered)
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('Kreative Dental & Orthodontics', 60, startY + 20);
+    doc.setTextColor(60, 60, 60); // Dark gray color
+    const textX = logoX + logoSize + 10; // Position text next to logo
+    const textY = startY + (logoSize / 2) + 6; // Vertically center with logo
+    doc.text('Kreative Dental & Orthodontics', textX, textY);
     
     // Add a subtle line under the header
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
-    doc.line(20, startY + 40, doc.internal.pageSize.getWidth() - 20, startY + 40);
+    doc.line(20, startY + logoSize + 15, pageWidth - 20, startY + logoSize + 15);
     
     // Return the Y position after the header for subsequent content
-    return startY + 50;
+    return startY + logoSize + 30;
   } catch (error) {
     console.error('Error adding clinic header to PDF:', error);
-    // Fallback: just add text without logo
-    doc.setFontSize(16);
+    // Fallback: just add text without logo (centered)
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('Kreative Dental & Orthodontics', 20, startY + 20);
+    doc.setTextColor(60, 60, 60);
+    const textWidth = doc.getTextWidth('Kreative Dental & Orthodontics');
+    doc.text('Kreative Dental & Orthodontics', (pageWidth - textWidth) / 2, startY + 20);
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
-    doc.line(20, startY + 40, doc.internal.pageSize.getWidth() - 20, startY + 40);
+    doc.line(20, startY + 40, pageWidth - 20, startY + 40);
     return startY + 50;
   }
 };

@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import DentistNavbar from "../components/DentistNavbar";
 import "./DentistLayout.css";
 import DentistPasswordGate from "../components/DentistPasswordGate";
+import { Toaster } from "react-hot-toast";
 
 function DentistLayout() {
   const location = useLocation();
@@ -26,6 +27,7 @@ function DentistLayout() {
   
   return (
     <div className="d-flex flex-column min-vh-100 bg-light dentist-layout">
+      <Toaster position="top-center" />
       <DentistNavbar />
       
       {isHomepage ? (

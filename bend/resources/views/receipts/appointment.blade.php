@@ -13,15 +13,29 @@
             font-size: 12px;
         }
         .header {
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border-bottom: 3px solid #0077be;
             padding-bottom: 15px;
             margin-bottom: 25px;
+            gap: 12px;
+        }
+        .header-logo {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+        }
+        .header-content {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
         }
         .header h1 {
-            color: #0077be;
+            color: #3c3c3c;
             margin: 0;
-            font-size: 24px;
+            font-size: 20px;
+            font-weight: bold;
         }
         .header p {
             color: #666;
@@ -120,8 +134,11 @@
 </head>
 <body>
     <div class="header">
-        <h1>{{ $clinic_name }}</h1>
-        <p>Official Receipt</p>
+        <img src="{{ base_path('public/logo.png') }}" alt="Kreative Dental Logo" class="header-logo" />
+        <div class="header-content">
+            <h1>{{ $clinic_name }}</h1>
+            <p>Official Receipt</p>
+        </div>
     </div>
     
     <div class="receipt-info">

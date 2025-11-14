@@ -2,16 +2,16 @@
 
 namespace Database\Seeders;
 
-use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\PatientVisit;
-use App\Models\Payment;
 use App\Models\Service;
 use App\Models\User;
-use App\Models\VisitNote;
+use App\Models\DentistSchedule;
 use App\Services\ClinicDateResolverService;
+use Carbon\Carbon;
+use Database\Seeders\Support\RealisticVisitFactory;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Carbon;
 
 class ReportSeeder extends Seeder
 {
@@ -25,15 +25,23 @@ class ReportSeeder extends Seeder
         $endOfMonth = (clone $now)->endOfMonth();
 
         // Ensure there are patients and services
-        $patients = Patient::query()->pluck('id')->all();
-        $services = Service::query()->where('is_active', true)->pluck('id')->all();
+        $patients = Patient::with('user')->get();
+        $services = Service::query()
+            ->where('is_active', true)
+            ->where('is_excluded_from_analytics', false)
+            ->get();
+        $adminUser = User::where('role', 'admin')->first();
 
-        if (empty($patients)) {
+        if ($patients->isEmpty()) {
             $this->command?->warn('No patients found; skipping ReportSeeder');
             return;
         }
-        if (empty($services)) {
+        if ($services->isEmpty()) {
             $this->command?->warn('No services found; skipping ReportSeeder');
+            return;
+        }
+        if (!$adminUser) {
+            $this->command?->warn('No admin user found; skipping ReportSeeder');
             return;
         }
 
@@ -41,236 +49,100 @@ class ReportSeeder extends Seeder
         PatientVisit::whereBetween('start_time', [$startOfMonth, $endOfMonth])->delete();
 
         $numDays = (int) $startOfMonth->diffInDays($endOfMonth) + 1;
-        $statuses = ['pending', 'completed', 'rejected', 'inquiry'];
 
-        $visitRows = [];
-        $appointmentRows = [];
-        $visitNotesRows = [];
+        $factory = new RealisticVisitFactory($adminUser);
+        $resolver = app(ClinicDateResolverService::class);
 
-        // Create visits per day, respecting capacity limits
+        $visitCount = 0;
+        $appointmentCount = 0;
+        $paymentCount = 0;
+
         for ($d = 0; $d < $numDays; $d++) {
             $day = (clone $startOfMonth)->addDays($d);
-            
-            // Skip Sundays (clinic closed)
-            if ($day->isSunday()) {
+
+            $snap = $resolver->resolve($day);
+
+            if (
+                !$snap['is_open'] ||
+                empty($snap['open_time']) ||
+                empty($snap['close_time'])
+            ) {
                 continue;
             }
-            
-            // Get clinic capacity for this day
-            $resolver = app(ClinicDateResolverService::class);
-            $snap = $resolver->resolve($day);
-            
-            if (!$snap['is_open']) {
-                continue; // Skip if clinic is closed
-            }
-            
-            $capacity = (int) $snap['effective_capacity'];
+
+            $capacity = max(1, (int) $snap['effective_capacity']);
             $grid = ClinicDateResolverService::buildBlocks($snap['open_time'], $snap['close_time']);
-            
-            // Track capacity usage per time slot
+
+            if (empty($grid)) {
+                continue;
+            }
+
             $slotUsage = array_fill_keys($grid, 0);
-            
-            // Calculate max visits based on capacity
-            $maxVisitsToday = min(16, $capacity * count($grid) * 0.6); // Max 60% of total capacity
-            $visitsToday = random_int(6, $maxVisitsToday);
+            $activeDentists = $this->resolveDentistsForDay($day, $snap);
 
-            for ($i = 0; $i < $visitsToday; $i++) {
-                $patientId = $patients[array_rand($patients)];
-                $serviceId = $services[array_rand($services)]; // Always assign a service
+            $maxVisitsToday = min(16, (int) round($capacity * count($grid) * 0.6));
 
-                // Find available time slot that respects capacity
-                $availableSlot = $this->findAvailableSlot($slotUsage, $capacity, $grid);
-                if (!$availableSlot) {
-                    // No available slots, skip this visit
-                    continue;
-                }
-                
-                $startAt = (clone $day)->setTime($availableSlot['hour'], $availableSlot['minute'], 0);
-                // Ensure reasonable distribution of statuses
-                $statusRoll = random_int(1, 100);
-                if ($statusRoll <= 8) {
-                    $status = 'inquiry'; // 8% inquiries
-                } elseif ($statusRoll <= 13) {
-                    $status = 'rejected'; // 5% rejected
-                } elseif ($statusRoll <= 23) {
-                    $status = 'pending'; // 10% pending
-                } else {
-                    $status = 'completed'; // 77% completed
-                }
+            if ($maxVisitsToday <= 0) {
+                continue;
+            }
 
-                $endAt = null;
-                if ($status !== 'pending') {
-                    $endAt = (clone $startAt)->addMinutes(random_int(20, 120));
-                }
-                
-                $timeSlot = sprintf('%02d:%02d-%02d:%02d', 
-                    $availableSlot['hour'], 
-                    $availableSlot['minute'], 
-                    $endAt ? $endAt->hour : $availableSlot['hour'] + 1, 
-                    $endAt ? $endAt->minute : $availableSlot['minute']
+            if ($maxVisitsToday >= 6) {
+                $visitsToday = random_int(6, $maxVisitsToday);
+            } else {
+                $visitsToday = random_int(1, $maxVisitsToday);
+            }
+
+            $createdToday = 0;
+            $attempts = 0;
+
+            while ($createdToday < $visitsToday && $attempts < $visitsToday * 3) {
+                $attempts++;
+                $result = $factory->createVisitForDay(
+                    $day,
+                    $patients,
+                    $services,
+                    $activeDentists,
+                    $slotUsage,
+                    $grid,
+                    $capacity
                 );
 
-                $visitRows[] = [
-                    'patient_id' => $patientId,
-                    'service_id' => $serviceId,
-                    'visit_date' => $day->toDateString(),
-                    'start_time' => $startAt->toDateTimeString(),
-                    'end_time' => $endAt?->toDateTimeString(),
-                    'status' => $status,
-                    'is_seeded' => true,
-                    'created_at' => now()->toDateTimeString(),
-                    'updated_at' => now()->toDateTimeString(),
-                ];
-
-                // Add visit note for inquiry status
-                if ($status === 'inquiry') {
-                    $visitNotesRows[] = [
-                        'patient_visit_id' => null, // Will be set after visit is created
-                        'dentist_notes_encrypted' => 'Inquiry only: Patient inquired about services but did not proceed with treatment',
-                        'findings_encrypted' => null,
-                        'treatment_plan_encrypted' => null,
-                        'created_by' => null,
-                        'updated_by' => null,
-                        'last_accessed_at' => null,
-                        'last_accessed_by' => null,
-                        'created_at' => now()->toDateTimeString(),
-                        'updated_at' => now()->toDateTimeString(),
-                    ];
+                if (!$result['visit']) {
+                    continue;
                 }
 
-                // Create an appointment for ~40% of visits that have a service
-                if ($serviceId && random_int(0, 9) < 4) {
-                    $appointmentStatus = ['approved', 'completed'][random_int(0, 1)];
-                    $appointmentRows[] = [
-                        'patient_id' => $patientId,
-                        'service_id' => $serviceId,
-                        'patient_hmo_id' => null,
-                        'date' => $day->toDateString(),
-                        'time_slot' => $timeSlot,
-                        'reference_code' => null,
-                        'status' => $appointmentStatus,
-                        'payment_method' => 'cash',
-                        'payment_status' => 'unpaid',
-                        'notes' => null,
-                        'canceled_at' => null,
-                        'reminded_at' => null,
-                        'is_seeded' => true,
-                        'created_at' => now()->toDateTimeString(),
-                        'updated_at' => now()->toDateTimeString(),
-                    ];
+                $createdToday++;
+                $visitCount++;
+                if ($result['appointment']) {
+                    $appointmentCount++;
                 }
-                
-                // Update slot usage
-                $this->updateSlotUsage($slotUsage, $timeSlot, $grid);
-            }
-        }
-
-        // Bulk insert visits for performance
-        foreach (array_chunk($visitRows, 1000) as $chunk) {
-            PatientVisit::insert($chunk);
-        }
-        
-        // Create visit notes for inquiry visits
-        if (!empty($visitNotesRows)) {
-            // Get the inquiry visits that were just created
-            $inquiryVisits = PatientVisit::where('status', 'inquiry')
-                ->whereBetween('start_time', [$startOfMonth, $endOfMonth])
-                ->orderBy('created_at')
-                ->get();
-            
-            // Create visit notes for each inquiry visit
-            foreach ($inquiryVisits as $index => $visit) {
-                if ($index < count($visitNotesRows)) {
-                    $noteData = $visitNotesRows[$index];
-                    $noteData['patient_visit_id'] = $visit->id;
-                    VisitNote::create($noteData);
+                if ($result['payment']) {
+                    $paymentCount++;
                 }
             }
         }
-        
-        // Bulk insert appointments
-        foreach (array_chunk($appointmentRows, 1000) as $chunk) {
-            Appointment::insert($chunk);
-        }
 
-        // Create Payment records for completed visits
-        $this->createPaymentsForCompletedVisits($startOfMonth, $endOfMonth);
-
-        $this->command?->info('ReportSeeder: seeded '.count($visitRows).' visits, '.count($visitNotesRows).' visit notes, and '.count($appointmentRows).' appointments for '.$startOfMonth->format('Y-m'));
+        $this->command?->info(
+            sprintf(
+                'ReportSeeder: seeded %d visits, %d appointments, and %d payments for %s',
+                $visitCount,
+                $appointmentCount,
+                $paymentCount,
+                $startOfMonth->format('Y-m')
+            )
+        );
     }
 
-    private function createPaymentsForCompletedVisits(Carbon $startOfMonth, Carbon $endOfMonth): void
+    private function resolveDentistsForDay(Carbon $day, array $snap): EloquentCollection
     {
-        // Get completed visits for the month
-        $completedVisits = PatientVisit::whereBetween('start_time', [$startOfMonth, $endOfMonth])
-            ->where('status', 'completed')
-            ->with('service')
-            ->get();
+        $ids = collect($snap['active_dentist_ids'] ?? [])
+            ->filter()
+            ->values();
 
-        // Get an admin user for created_by
-        $adminUser = User::where('role', 'admin')->first();
-
-        foreach ($completedVisits as $visit) {
-            $service = $visit->service;
-            $amount = $service ? $service->price : 2000; // Default amount if no service
-
-            Payment::create([
-                'appointment_id' => null,
-                'patient_visit_id' => $visit->id,
-                'currency' => 'PHP',
-                'amount_due' => $amount,
-                'amount_paid' => $amount,
-                'method' => 'cash', // Default to cash for seeded visits
-                'status' => 'paid',
-                'reference_no' => 'REPORT-PAY-' . strtoupper(uniqid()),
-                'paid_at' => $visit->end_time ?? $visit->created_at,
-                'created_by' => $adminUser?->id,
-                'created_at' => $visit->created_at,
-                'updated_at' => $visit->created_at,
-            ]);
+        if ($ids->isNotEmpty()) {
+            return DentistSchedule::whereIn('id', $ids)->get();
         }
 
-        if ($completedVisits->count() > 0) {
-            $this->command?->info('Created ' . $completedVisits->count() . ' Payment records for completed visits.');
-        }
-    }
-
-    private function findAvailableSlot(array $slotUsage, int $capacity, array $grid): ?array
-    {
-        // Try to find an available slot
-        $attempts = 0;
-        $maxAttempts = count($grid) * 2;
-        
-        while ($attempts < $maxAttempts) {
-            $slot = $grid[array_rand($grid)];
-            [$hour, $minute] = array_map('intval', explode(':', $slot));
-            
-            // Check if this slot has capacity
-            if ($slotUsage[$slot] < $capacity) {
-                return ['hour' => $hour, 'minute' => $minute];
-            }
-            
-            $attempts++;
-        }
-        
-        return null; // No available slot found
-    }
-
-    private function updateSlotUsage(array &$slotUsage, string $timeSlot, array $grid): void
-    {
-        if (strpos($timeSlot, '-') === false) return;
-        
-        [$start, $end] = explode('-', $timeSlot, 2);
-        $startTime = \Carbon\Carbon::createFromFormat('H:i', trim($start));
-        $endTime = \Carbon\Carbon::createFromFormat('H:i', trim($end));
-        
-        $current = $startTime->copy();
-        while ($current->lt($endTime)) {
-            $slotKey = $current->format('H:i');
-            if (array_key_exists($slotKey, $slotUsage)) {
-                $slotUsage[$slotKey]++;
-            }
-            $current->addMinutes(30);
-        }
+        return DentistSchedule::activeOnDate($day)->get();
     }
 }

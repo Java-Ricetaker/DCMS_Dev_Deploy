@@ -1,6 +1,7 @@
 // File: src/pages/Admin/CapacityPlanner.jsx
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 // Utilities
 const todayYMD = () => new Date().toISOString().slice(0, 10);
@@ -101,7 +102,7 @@ export default function CapacityPlanner() {
       // Map rows to their original counterparts by date
       const origByDate = Object.fromEntries(origRows.map((o) => [o.date, o]));
       await Promise.all(rows.map((r) => saveOne(r, origByDate[r.date])));
-      alert("Changes saved.");
+      toast.success("Changes saved.");
       // Refresh snapshot so subsequent saves only send new changes
       setOrigRows(rows);
     } catch (e) {

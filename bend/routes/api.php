@@ -198,6 +198,7 @@ Route::middleware(['auth:sanctum', 'check.account.status', AdminOnly::class])->g
     // Reports
     Route::prefix('reports')->group(function () {
         Route::get('/visits-monthly', [ReportController::class, 'visitsMonthly']);
+        Route::get('/visits-daily', [ReportController::class, 'visitsDaily']);
     });
 
     // Analytics summary

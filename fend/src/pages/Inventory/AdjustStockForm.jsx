@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 const REASONS = [
   "damaged",
@@ -94,7 +95,7 @@ export default function AdjustStockForm({ items = [], onAdjusted, onNeedReceive 
     // Guard: ensure selected batch belongs to selected item (from fetched list)
     const b = batches.find((x) => String(x.id) === String(form.batch_id));
     if (!b) {
-      alert("Please select a valid batch.");
+      toast.error("Please select a valid batch.");
       return;
     }
 
@@ -116,9 +117,9 @@ export default function AdjustStockForm({ items = [], onAdjusted, onNeedReceive 
       await api.post("/api/inventory/adjust", payload);
       setForm((f) => ({ ...f, quantity: "", notes: "", custom_reason: "" }));
       onAdjusted?.();
-      alert("Inventory adjusted.");
+      toast.success("Inventory adjusted.");
     } catch (err) {
-      alert(err?.response?.data?.message || "Adjust failed");
+      toast.error(err?.response?.data?.message || "Adjust failed");
     }
   };
 

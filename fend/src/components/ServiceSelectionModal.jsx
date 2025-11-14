@@ -117,25 +117,19 @@ function ServiceSelectionModal({
               <div className="single-service-view">
                 <div className="row mb-4">
                   <div className="col-12">
-                    <div className="d-flex align-items-center gap-3">
-                      <button 
-                        className="btn btn-outline-primary"
-                        onClick={handleBackToGrid}
-                      >
-                        <i className="bi bi-arrow-left me-2"></i>
-                        Back to All Services
-                      </button>
-                      <div className="alert alert-success border-0 rounded-3 shadow-sm mb-0 flex-grow-1">
-                        <div className="d-flex align-items-center">
-                          <i className="bi bi-check-circle-fill text-success me-3 fs-4"></i>
-                          <div>
-                            <h5 className="alert-heading mb-1 text-success">
-                              Selected Service
-                            </h5>
-                            <p className="mb-0 text-muted">
-                              Click to change or confirm selection
-                            </p>
-                          </div>
+                    <div className="alert border-0 rounded-3 shadow-sm mb-0" style={{
+                      background: 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
+                      border: '1px solid #b8dacc'
+                    }}>
+                      <div className="d-flex align-items-center">
+                        <i className="bi bi-check-circle-fill text-success me-3" style={{fontSize: '1.5rem'}}></i>
+                        <div>
+                          <h5 className="alert-heading mb-1 text-success fw-bold">
+                            Selected Service
+                          </h5>
+                          <p className="mb-0" style={{color: '#155724'}}>
+                            Click to change or confirm selection
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -144,7 +138,11 @@ function ServiceSelectionModal({
 
                 <div className="row justify-content-center">
                   <div className="col-12 col-md-10 col-lg-8 col-xl-6">
-                    <div className="card border-0 shadow-lg selected-service-card">
+                    <div className="card border-0 selected-service-card" style={{
+                      borderRadius: '16px',
+                      background: '#ffffff',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                    }}>
                       <div className="card-body p-4 p-md-5 text-center">
                         <div className="mb-4">
                           <h2 className="card-title fw-bold text-dark mb-4" style={{
@@ -174,9 +172,12 @@ function ServiceSelectionModal({
                                 ₱{Number(selectedService.promo_price).toLocaleString()}{selectedService.per_teeth_service ? ' per tooth' : ''}
                               </div>
                               {selectedService.per_teeth_service && (
-                                <div className="text-center mt-2">
-                                  <small className="text-info">
-                                    <i className="bi bi-info-circle me-1"></i>
+                                <div className="text-center mt-3">
+                                  <small className="d-inline-flex align-items-center" style={{
+                                    color: '#007bff',
+                                    fontSize: '0.875rem'
+                                  }}>
+                                    <i className="bi bi-info-circle me-2" style={{fontSize: '1rem'}}></i>
                                     Total cost depends on number of teeth treated
                                   </small>
                                 </div>
@@ -195,9 +196,12 @@ function ServiceSelectionModal({
                               </div>
                               <span className="badge bg-info fs-6">Special Service</span>
                               {selectedService.per_teeth_service && (
-                                <div className="text-center mt-2">
-                                  <small className="text-info">
-                                    <i className="bi bi-info-circle me-1"></i>
+                                <div className="text-center mt-3">
+                                  <small className="d-inline-flex align-items-center" style={{
+                                    color: '#007bff',
+                                    fontSize: '0.875rem'
+                                  }}>
+                                    <i className="bi bi-info-circle me-2" style={{fontSize: '1rem'}}></i>
                                     Total cost depends on number of teeth treated
                                   </small>
                                 </div>
@@ -215,46 +219,143 @@ function ServiceSelectionModal({
                                 ₱{Number(selectedService.price).toLocaleString()}{selectedService.per_teeth_service ? ' per tooth' : ''}
                               </div>
                               {selectedService.per_teeth_service && (
-                                <div className="text-center mt-2">
-                                  <small className="text-info">
-                                    <i className="bi bi-info-circle me-1"></i>
+                                <div className="text-center mt-3">
+                                  <small className="d-inline-flex align-items-center" style={{
+                                    color: '#007bff',
+                                    fontSize: '0.875rem'
+                                  }}>
+                                    <i className="bi bi-info-circle me-2" style={{fontSize: '1rem'}}></i>
                                     Total cost depends on number of teeth treated
                                   </small>
                                 </div>
                               )}
                             </div>
                           )}
+                          {selectedService.is_follow_up && (
+                            <div className="mt-4">
+                              <span className="badge bg-primary fs-6 px-3 py-2">Follow-up Service</span>
+                              <div className="mt-3 text-muted">
+                                <strong>Parent Service:</strong>{" "}
+                                {selectedService.follow_up_parent_name || "Assigned parent service"}
+                              </div>
+                              <div className="text-muted">
+                                {selectedService.follow_up_max_gap_weeks === null || selectedService.follow_up_max_gap_weeks === undefined
+                                  ? "No time limit between parent and follow-up visits."
+                                  : `Book within ${selectedService.follow_up_max_gap_weeks} week${selectedService.follow_up_max_gap_weeks === 1 ? '' : 's'} of completing the parent service.`}
+                              </div>
+                            </div>
+                          )}
+                          {selectedService.has_follow_up_services && selectedService.follow_up_services && selectedService.follow_up_services.length > 0 && (
+                            <div className="mt-4">
+                              <div className="alert alert-warning border-0 shadow-sm" role="alert">
+                                <div className="d-flex align-items-start">
+                                  <i className="bi bi-exclamation-triangle-fill me-3 fs-4 text-warning"></i>
+                                  <div>
+                                    <h6 className="alert-heading text-warning mb-2">
+                                      <strong>Are you sure you want to book this service?</strong>
+                                    </h6>
+                                    <p className="mb-2">
+                                      This service has a follow-up service available. If you've already completed this service before, you might want to book the follow-up service instead:
+                                    </p>
+                                    <ul className="mb-2 ps-3">
+                                      {selectedService.follow_up_services.map((followUp) => (
+                                        <li key={followUp.id}>
+                                          <strong>{followUp.name}</strong>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    <p className="mb-0">
+                                      <strong>Please confirm:</strong> Do you want to book <strong>{selectedService.name}</strong> (the parent service) or one of the follow-up services listed above?
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        <div className="d-grid gap-3">
+                        <div className="d-grid gap-3 mt-4">
                           <button
-                            className="btn btn-success btn-lg fw-bold"
+                            className="btn btn-lg fw-bold"
                             onClick={() => {
                               onServiceSelect(selectedService);
                               onClose();
                             }}
                             style={{
-                              padding: '1rem 2rem',
-                              fontSize: '1.1rem',
-                              borderRadius: '12px',
-                              whiteSpace: 'nowrap'
+                              padding: '0.875rem 1.75rem',
+                              fontSize: '1rem',
+                              borderRadius: '10px',
+                              whiteSpace: 'nowrap',
+                              background: '#28a745',
+                              border: 'none',
+                              color: 'white',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = '#218838';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = '#28a745';
+                              e.target.style.transform = 'translateY(0)';
                             }}
                           >
                             <i className="bi bi-check-circle-fill me-2"></i>
                             Confirm Selection
                           </button>
                           <button
-                            className="btn btn-outline-primary btn-lg"
+                            className="btn btn-lg"
                             onClick={handleBackToGrid}
                             style={{
-                              padding: '0.8rem 1.5rem',
-                              fontSize: '1rem',
-                              borderRadius: '12px',
-                              whiteSpace: 'nowrap'
+                              padding: '0.75rem 1.5rem',
+                              fontSize: '0.95rem',
+                              borderRadius: '10px',
+                              whiteSpace: 'nowrap',
+                              background: 'transparent',
+                              border: '2px solid #007bff',
+                              color: '#007bff',
+                              fontWeight: '500',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = '#007bff';
+                              e.target.style.color = 'white';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = 'transparent';
+                              e.target.style.color = '#007bff';
+                              e.target.style.transform = 'translateY(0)';
+                            }}
+                          >
+                            <i className="bi bi-arrow-left-right me-2"></i>
+                            Choose Different Service
+                          </button>
+                          <button
+                            className="btn btn-lg"
+                            onClick={handleBackToGrid}
+                            style={{
+                              padding: '0.75rem 1.5rem',
+                              fontSize: '0.95rem',
+                              borderRadius: '10px',
+                              whiteSpace: 'nowrap',
+                              background: 'linear-gradient(90deg, #00b4d8 0%, #0077b6 100%)',
+                              border: 'none',
+                              color: 'white',
+                              fontWeight: '500',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = 'linear-gradient(90deg, #0096c7 0%, #0056b3 100%)';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = 'linear-gradient(90deg, #00b4d8 0%, #0077b6 100%)';
+                              e.target.style.transform = 'translateY(0)';
                             }}
                           >
                             <i className="bi bi-arrow-left me-2"></i>
-                            Choose Different Service
+                            Back to All Services
                           </button>
                         </div>
                       </div>
@@ -382,6 +483,19 @@ function ServiceSelectionModal({
                               {service.type === "regular" && (
                                 <div className="h4 text-dark fw-bold mb-0">
                                   ₱{Number(service.price).toLocaleString()}{service.per_teeth_service ? ' per tooth' : ''}
+                                </div>
+                              )}
+                              {service.is_follow_up && (
+                                <div className="mt-3">
+                                  <span className="badge bg-primary me-2">Follow-up</span>
+                                  <div className="text-muted small mt-1">
+                                    Parent: {service.follow_up_parent_name || 'Assigned parent service'}
+                                  </div>
+                                  <div className="text-muted small">
+                                    {service.follow_up_max_gap_weeks === null || service.follow_up_max_gap_weeks === undefined
+                                      ? 'No time limit between visits'
+                                      : `Book within ${service.follow_up_max_gap_weeks} week${service.follow_up_max_gap_weeks === 1 ? '' : 's'} of completing the parent service`}
+                                  </div>
                                 </div>
                               )}
                             </div>

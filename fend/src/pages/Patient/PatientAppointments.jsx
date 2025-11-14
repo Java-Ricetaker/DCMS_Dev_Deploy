@@ -194,7 +194,7 @@ function PatientAppointments() {
         // ✅ 3) go to Maya sandbox hosted page
         window.location.href = data.redirect_url;
       } else {
-        alert("Payment link not available. Please try again.");
+        toast.error("Payment link not available. Please try again.");
       }
     } catch (err) {
       console.error("Create Maya payment failed", err);
@@ -203,7 +203,7 @@ function PatientAppointments() {
         err.response?.data?.message ||
         err.response?.data?.maya?.message ||
         "Unable to start payment. Please try again.";
-      alert(serverMsg);
+      toast.error(serverMsg);
     } finally {
       setPaying(null);
     }
@@ -237,7 +237,7 @@ function PatientAppointments() {
 
   const handleRescheduleSubmit = async () => {
     if (!rescheduleDate || !selectedRescheduleSlot || !rescheduleModal) {
-      alert("Please select both date and time slot.");
+      toast.error("Please select both date and time slot.");
       return;
     }
 
@@ -248,7 +248,7 @@ function PatientAppointments() {
         start_time: selectedRescheduleSlot,
       });
 
-      alert("Appointment rescheduled successfully! It will need staff approval.");
+      toast.success("Appointment rescheduled successfully! It will need staff approval.");
       setRescheduleModal(null);
       setRescheduleDate("");
       setRescheduleSlots([]);
@@ -260,10 +260,10 @@ function PatientAppointments() {
       
       // Check if this is a blocked patient error
       if (errorData?.blocked) {
-        alert(errorData.message);
+        toast.error(errorData.message);
       } else {
         const serverMsg = errorData?.message || "Failed to reschedule appointment.";
-        alert(serverMsg);
+        toast.error(serverMsg);
       }
     } finally {
       setRescheduleLoading(false);

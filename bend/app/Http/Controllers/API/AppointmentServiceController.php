@@ -13,6 +13,7 @@ use App\Models\Patient;
 use App\Services\PreferredDentistService;
 use App\Services\ClinicDateResolverService;
 use Illuminate\Support\Facades\Auth;
+use App\Models\PatientVisit;
 
 class AppointmentServiceController extends Controller
 {
@@ -45,7 +46,7 @@ class AppointmentServiceController extends Controller
         }
 
         // 2. Promo logic: get launched promos and deduplicate
-        $activePromos = ServiceDiscount::with('service')
+        $activePromos = ServiceDiscount::with(['service.followUpParent'])
             ->where('status', 'launched')
             ->whereDate('start_date', '<=', $date)
             ->whereDate('end_date', '>=', $date)
@@ -66,21 +67,35 @@ class AppointmentServiceController extends Controller
                 ? min(round(100 - ($discountPrice / $originalPrice * 100)), 100)
                 : 100;
 
+            $service = $promo->service->load('followUpChildren');
+
             return [
-                'id' => $promo->service->id,
-                'name' => $promo->service->name,
+                'id' => $service->id,
+                'name' => $service->name,
                 'type' => 'promo',
                 'original_price' => $originalPrice,
                 'promo_price' => $discountPrice,
                 'discount_percent' => $percent,
-                'per_teeth_service' => $promo->service->per_teeth_service,
-                'per_tooth_minutes' => $promo->service->per_tooth_minutes,
+                'per_teeth_service' => $service->per_teeth_service,
+                'per_tooth_minutes' => $service->per_tooth_minutes,
+                'is_follow_up' => (bool) $service->is_follow_up,
+                'follow_up_parent_service_id' => $service->follow_up_parent_service_id,
+                'follow_up_parent_name' => optional($service->followUpParent)->name,
+                'follow_up_max_gap_weeks' => $service->follow_up_max_gap_weeks,
+                'has_follow_up_services' => $service->followUpChildren->isNotEmpty(),
+                'follow_up_services' => $service->followUpChildren->map(function ($followUp) {
+                    return [
+                        'id' => $followUp->id,
+                        'name' => $followUp->name,
+                    ];
+                })->values(),
             ];
         })->values();
 
         // 3. Regular services (exclude those with promo)
         $regularServices = Service::where('is_special', false)
             ->whereNotIn('id', $promoServiceIds)
+            ->with(['followUpParent', 'followUpChildren'])
             ->get()
             ->map(function ($service) {
                 return [
@@ -90,11 +105,24 @@ class AppointmentServiceController extends Controller
                     'price' => $service->price,
                     'per_teeth_service' => $service->per_teeth_service,
                     'per_tooth_minutes' => $service->per_tooth_minutes,
+                    'is_follow_up' => (bool) $service->is_follow_up,
+                    'follow_up_parent_service_id' => $service->follow_up_parent_service_id,
+                    'follow_up_parent_name' => optional($service->followUpParent)->name,
+                    'follow_up_max_gap_weeks' => $service->follow_up_max_gap_weeks,
+                    'has_follow_up_services' => $service->followUpChildren->isNotEmpty(),
+                    'follow_up_services' => $service->followUpChildren->map(function ($followUp) {
+                        return [
+                            'id' => $followUp->id,
+                            'name' => $followUp->name,
+                        ];
+                    })->values(),
                 ];
             });
 
         // 4. Special services (permanent or date-limited)
-        $specialServices = Service::where('is_special', true)->get()->filter(function ($service) use ($carbonDate) {
+        $specialServices = Service::where('is_special', true)
+            ->with(['followUpParent', 'followUpChildren'])
+            ->get()->filter(function ($service) use ($carbonDate) {
             if (!$service->special_start_date && !$service->special_end_date) {
                 return true;
             }
@@ -111,8 +139,26 @@ class AppointmentServiceController extends Controller
                 'special_until' => optional($service->special_end_date)?->toDateString(),
                 'per_teeth_service' => $service->per_teeth_service,
                 'per_tooth_minutes' => $service->per_tooth_minutes,
+                'is_follow_up' => (bool) $service->is_follow_up,
+                'follow_up_parent_service_id' => $service->follow_up_parent_service_id,
+                'follow_up_parent_name' => optional($service->followUpParent)->name,
+                'follow_up_max_gap_weeks' => $service->follow_up_max_gap_weeks,
+                'has_follow_up_services' => $service->followUpChildren->isNotEmpty(),
+                'follow_up_services' => $service->followUpChildren->map(function ($followUp) {
+                    return [
+                        'id' => $followUp->id,
+                        'name' => $followUp->name,
+                    ];
+                })->values(),
             ];
         });
+
+        $effectivePatientId = null;
+        if ($request->filled('patient_id')) {
+            $effectivePatientId = (int) $request->query('patient_id');
+        } elseif (Auth::check()) {
+            $effectivePatientId = optional(Patient::byUser(Auth::id()))?->id;
+        }
 
         // 5. Combine all results
         $combined = $regularServices
@@ -120,17 +166,41 @@ class AppointmentServiceController extends Controller
             ->concat($promoServices)
             ->values();
 
+        $shouldRestrictFollowUps = $this->shouldRestrictFollowUps();
+        $eligibleFollowUpServiceIds = [];
+
+        if ($shouldRestrictFollowUps) {
+            $eligibleFollowUpServiceIds = $this->resolveEligibleFollowUpServiceIds(
+                $combined,
+                $effectivePatientId,
+                $carbonDate
+            );
+        }
+
+        $combined = $combined->filter(function ($service) use (
+            $shouldRestrictFollowUps,
+            $eligibleFollowUpServiceIds,
+            $effectivePatientId
+        ) {
+            if (!($service['is_follow_up'] ?? false)) {
+                return true;
+            }
+
+            if (!$shouldRestrictFollowUps) {
+                return true;
+            }
+
+            if (!$effectivePatientId) {
+                return false;
+            }
+
+            return in_array($service['id'], $eligibleFollowUpServiceIds, true);
+        })->values();
+
         $includeMeta = $request->boolean('with_meta', false);
 
         if (!$includeMeta) {
             return response()->json($combined);
-        }
-
-        $effectivePatientId = null;
-        if ($request->filled('patient_id')) {
-            $effectivePatientId = (int) $request->query('patient_id');
-        } elseif (Auth::check()) {
-            $effectivePatientId = optional(Patient::byUser(Auth::id()))?->id;
         }
 
         $patient = $effectivePatientId ? Patient::find($effectivePatientId) : null;
@@ -188,5 +258,111 @@ class AppointmentServiceController extends Controller
         ]);
     }
 
+    private function shouldRestrictFollowUps(): bool
+    {
+        if (!Auth::check()) {
+            return false;
+        }
 
+        return Auth::user()->role === 'patient';
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, array<string, mixed>> $services
+     * @return array<int, int>
+     */
+    private function resolveEligibleFollowUpServiceIds($services, ?int $patientId, Carbon $targetDate): array
+    {
+        if (!$patientId) {
+            return [];
+        }
+
+        $followUpServices = $services->filter(function ($service) {
+            return ($service['is_follow_up'] ?? false) && !empty($service['follow_up_parent_service_id']);
+        });
+
+        if ($followUpServices->isEmpty()) {
+            return [];
+        }
+
+        $parentServiceIds = $followUpServices
+            ->pluck('follow_up_parent_service_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $followUpServiceIds = $followUpServices
+            ->pluck('id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $allRelevantServiceIds = $parentServiceIds
+            ->merge($followUpServiceIds)
+            ->unique()
+            ->values();
+
+        if ($allRelevantServiceIds->isEmpty()) {
+            return [];
+        }
+
+        $recentVisits = PatientVisit::where('patient_id', $patientId)
+            ->where('status', 'completed')
+            ->whereIn('service_id', $allRelevantServiceIds->all())
+            ->whereNotNull('visit_date')
+            ->orderBy('visit_date', 'desc')
+            ->get()
+            ->groupBy('service_id');
+
+        $eligible = [];
+
+        foreach ($followUpServices as $service) {
+            $parentId = $service['follow_up_parent_service_id'];
+            if (!$parentId) {
+                continue;
+            }
+
+            /** @var \Illuminate\Support\Collection|null $visitGroup */
+            $parentVisitGroup = $recentVisits->get($parentId);
+            $latestParentVisit = $parentVisitGroup?->first();
+
+            /** @var \Illuminate\Support\Collection|null $followUpVisitGroup */
+            $followUpVisitGroup = $recentVisits->get($service['id']);
+            $latestFollowUpVisit = $followUpVisitGroup?->first();
+
+            $lastRelevantDate = null;
+
+            if ($latestParentVisit && $latestParentVisit->visit_date) {
+                $lastRelevantDate = $latestParentVisit->visit_date->copy();
+            }
+
+            if ($latestFollowUpVisit && $latestFollowUpVisit->visit_date) {
+                $followUpDate = $latestFollowUpVisit->visit_date->copy();
+                if ($lastRelevantDate === null || $followUpDate->gt($lastRelevantDate)) {
+                    $lastRelevantDate = $followUpDate;
+                }
+            }
+
+            if ($lastRelevantDate === null) {
+                continue;
+            }
+
+            $maxGapWeeks = $service['follow_up_max_gap_weeks'] ?? null;
+
+            if ($maxGapWeeks !== null) {
+                $deadline = $lastRelevantDate->copy()->addWeeks((int) $maxGapWeeks);
+                if ($targetDate->gt($deadline)) {
+                    continue;
+                }
+            }
+
+            if ($targetDate->lt($lastRelevantDate)) {
+                continue;
+            }
+
+            $eligible[] = $service['id'];
+        }
+
+        return $eligible;
+    }
 }

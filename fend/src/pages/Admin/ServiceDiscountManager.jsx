@@ -3,6 +3,7 @@ import api from "../../api/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { ServiceSelectModal, EditPromoModal } from "../../components/ServiceDiscountModals";
 import "./ServiceDiscountManager.css";
+import toast from "react-hot-toast";
 
 export default function ServiceDiscountManager() {
   const [services, setServices] = useState([]);
@@ -81,9 +82,7 @@ export default function ServiceDiscountManager() {
         );
 
         if (res.data.warning) {
-          alert(
-            `⚠ Promo saved, but some dates are clinic closed:\n${res.data.warning}`
-          );
+          toast(`⚠ Promo saved, but some dates are clinic closed:\n${res.data.warning}`, { icon: "⚠️" });
         }
         setShowEditModal(false);
         setIsCreatingNew(false);
@@ -106,7 +105,7 @@ export default function ServiceDiscountManager() {
         const fieldErrors = err.response.data.errors;
 
         if (message?.includes("clinic closed")) {
-          alert(`❌ Cannot save promo: ${message}`);
+          toast.error(`❌ Cannot save promo: ${message}`);
           return; // stop here, don't reset form
         }
 
@@ -179,7 +178,7 @@ export default function ServiceDiscountManager() {
       setActionPromo(null);
     } catch (err) {
       console.error("Failed to launch promo", err);
-      alert("Failed to launch promo: " + (err.response?.data?.message || "Unknown error"));
+      toast.error("Failed to launch promo: " + (err.response?.data?.message || "Unknown error"));
     } finally {
       document.body.style.overflow = '';
     }
@@ -207,7 +206,7 @@ export default function ServiceDiscountManager() {
       setActionPromo(null);
     } catch (err) {
       console.error("Failed to cancel promo", err);
-      alert("Failed to cancel promo: " + (err.response?.data?.message || "Unknown error"));
+      toast.error("Failed to cancel promo: " + (err.response?.data?.message || "Unknown error"));
     } finally {
       document.body.style.overflow = '';
     }

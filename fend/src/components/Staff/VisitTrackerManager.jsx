@@ -6,6 +6,7 @@ import VisitNotesModal from "./VisitNotesModal";
 import SendVisitCodeModal from "./SendVisitCodeModal";
 import MedicalHistoryFormModal from "./MedicalHistoryFormModal";
 import TimeBlockModal from "./TimeBlockModal";
+import toast from "react-hot-toast";
 
 function VisitTrackerManager() {
   const [visits, setVisits] = useState([]);
@@ -162,7 +163,7 @@ function VisitTrackerManager() {
         payload = { visit_type: "walkin" };
       } else if (visitType === "appointment") {
         if (!appointmentData) {
-          alert("Search and select a valid appointment first.");
+          toast.error("Search and select a valid appointment first.");
           setSubmitting(false);
           return;
         }
@@ -188,9 +189,9 @@ function VisitTrackerManager() {
       
       // Check if requires_medical_history flag is present (for appointment-based visits)
       if (response.data.requires_medical_history) {
-        alert(`Visit created. Please complete the medical history form before sending the visit code to the dentist.`);
+        toast("Visit created. Please complete the medical history form before sending the visit code to the dentist.", { icon: "ℹ️" });
       } else if (visit.visit_code) {
-        alert(`Visit started successfully!\n\nVisit Code: ${visit.visit_code}\n\nShare this code with the dentist to begin consultation.`);
+        toast.success(`Visit started successfully!\n\nVisit Code: ${visit.visit_code}\n\nShare this code with the dentist to begin consultation.`);
       }
       
       // Add the newly created visit to the state immediately
@@ -212,7 +213,7 @@ function VisitTrackerManager() {
       console.log("✅ Visit creation process completed");
     } catch (err) {
       console.error("Error creating visit:", err);
-      alert("Failed to start visit.");
+      toast.error("Failed to start visit.");
     } finally {
       setSubmitting(false);
     }
@@ -224,12 +225,12 @@ function VisitTrackerManager() {
       
       // Check if service is selected for walk-in patients
       if (!visit.service_id) {
-        alert("Please select a service for this patient before finishing the visit. Use the 'Edit' button to assign a service.");
+        toast.error("Please select a service for this patient before finishing the visit. Use the 'Edit' button to assign a service.");
         return;
       }
 
       if (!visit.visit_code_sent_at) {
-        alert("Send the visit code to a dentist before completing the visit.");
+        toast.error("Send the visit code to a dentist before completing the visit.");
         return;
       }
       
@@ -241,7 +242,7 @@ function VisitTrackerManager() {
       await api.post(`/api/visits/${id}/${action}`);
       await fetchVisits();
     } catch (err) {
-      alert(`Failed to ${action} visit.`);
+      toast.error(`Failed to ${action} visit.`);
     }
   };
 
@@ -257,14 +258,14 @@ function VisitTrackerManager() {
       });
 
       if (response.data.note) {
-        alert(`${response.data.message}\n\n${response.data.note}`);
+        toast.success(`${response.data.message}\n\n${response.data.note}`);
       } else {
-        alert(`Receipt sent successfully to ${response.data.email}`);
+        toast.success(`Receipt sent successfully to ${response.data.email}`);
       }
     } catch (err) {
       console.error("Failed to send receipt email", err);
       const serverMsg = err.response?.data?.message || "Failed to send receipt email. Please try again.";
-      alert(serverMsg);
+      toast.error(serverMsg);
     } finally {
       setSendingReceipt(null);
     }
@@ -307,7 +308,7 @@ function VisitTrackerManager() {
       const servicesData = Array.isArray(res.data) ? res.data : res.data.data || [];
       setAvailableServices(normalizeServicesList(servicesData));
     } catch (err) {
-      alert("Failed to load services.");
+      toast.error("Failed to load services.");
     }
   };
 
@@ -349,7 +350,7 @@ function VisitTrackerManager() {
         }
       }
     } catch (err) {
-      alert("Failed to update patient.");
+      toast.error("Failed to update patient.");
     }
   };
 
@@ -575,30 +576,30 @@ function VisitTrackerManager() {
 
   const handleCreateAppointment = async () => {
     if (!appointmentForm.service_id || !appointmentForm.date || !appointmentForm.start_time) {
-      alert('Please select service, date, and time.');
+      toast.error('Please select service, date, and time.');
       return;
     }
 
     // Check if per-teeth service requires teeth count
     if (selectedServiceDetails && selectedServiceDetails.per_teeth_service && !appointmentForm.teeth_count) {
-      alert('Please enter the number of teeth for this per-teeth service.');
+      toast.error('Please enter the number of teeth for this per-teeth service.');
       return;
     }
 
     // Validate birthdate if provided
     const birthdateError = validateBirthdate(appointmentForm.birthdate);
     if (birthdateError) {
-      alert(birthdateError);
+      toast.error(birthdateError);
       return;
     }
 
     if (!appointmentForm.linkToExisting && (!appointmentForm.first_name || !appointmentForm.last_name || !appointmentForm.contact_number)) {
-      alert('Please fill in patient details including contact number (required for SMS reminders) or link to existing patient.');
+      toast.error('Please fill in patient details including contact number (required for SMS reminders) or link to existing patient.');
       return;
     }
 
     if (appointmentForm.linkToExisting && !appointmentForm.patient_id) {
-      alert('Please select an existing patient.');
+      toast.error('Please select an existing patient.');
       return;
     }
 
@@ -631,11 +632,11 @@ function VisitTrackerManager() {
       }
 
       const response = await api.post('/api/appointments/staff-create', payload);
-      alert(`Appointment created successfully!\nReference Code: ${response.data.appointment.reference_code}`);
+      toast.success(`Appointment created successfully!\nReference Code: ${response.data.appointment.reference_code}`);
       setShowMakeAppointmentModal(false);
     } catch (err) {
       const errorMessage = err.response?.data?.message || 'Failed to create appointment.';
-      alert(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setCreatingAppointment(false);
     }
@@ -742,7 +743,7 @@ function VisitTrackerManager() {
       <div className="flex-grow-1 d-flex flex-column">
         <div className="d-flex justify-content-between align-items-center mb-3">
           <div className="d-flex align-items-center">
-            <h5 className="mb-0">Ongoing Visits ({visits.length} total, {visits.filter(v => v.status === 'pending').length} pending)</h5>
+            <h5 className="mb-0">Ongoing Visits ({visits.filter(v => v.status === 'pending').length} pending)</h5>
             {loading && (
               <div className="d-flex align-items-center text-muted ms-3">
                 <div className="spinner-border spinner-border-sm me-2" role="status">
@@ -1174,7 +1175,7 @@ function VisitTrackerManager() {
                         });
                         setMatchingPatients(res.data);
                       } catch {
-                        alert("Search failed.");
+                        toast.error("Search failed.");
                       }
                     }
                   }}
@@ -1273,7 +1274,7 @@ function VisitTrackerManager() {
                       setEditingVisit(null);
                       await fetchVisits();
                     } catch {
-                      alert("Failed to link to patient.");
+                      toast.error("Failed to link to patient.");
                     }
                   }}
                 >
@@ -1338,9 +1339,9 @@ function VisitTrackerManager() {
                               setShowMatchesModal(false);
                               setEditingVisit(null);
                               await fetchVisits();
-                              alert('Visit successfully linked to existing patient!');
+                              toast.success('Visit successfully linked to existing patient!');
                             } catch (err) {
-                              alert('Failed to link visit to patient.');
+                              toast.error('Failed to link visit to patient.');
                             }
                           }
                         }}
@@ -1474,7 +1475,7 @@ function VisitTrackerManager() {
                                 });
                                 setMatchingPatients(res.data);
                               } catch {
-                                alert("Search failed.");
+                                toast.error("Search failed.");
                               }
                             }
                           }}
@@ -1564,7 +1565,7 @@ function VisitTrackerManager() {
                               // Real-time validation
                               const error = validateBirthdate(value);
                               if (error) {
-                                alert(error);
+                                toast.error(error);
                               }
                             }}
                             max={getMaxBirthdate()} // Must be at least 4 years old

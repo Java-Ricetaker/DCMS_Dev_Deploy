@@ -443,6 +443,44 @@ function BookAppointment() {
                             ₱{Number(selectedService.price || selectedService.promo_price).toLocaleString()}
                             {isPerTeethService ? " per tooth" : ""}
                           </span>
+                          {selectedService.is_follow_up && (
+                            <div className="mt-2">
+                              <span className="badge bg-primary me-2">Follow-up</span>
+                              <small className="text-muted d-block">
+                                Parent: {selectedService.follow_up_parent_name || "Assigned parent service"}
+                              </small>
+                              <small className="text-muted">
+                                {selectedService.follow_up_max_gap_weeks === null || selectedService.follow_up_max_gap_weeks === undefined
+                                  ? "No time limit between visits."
+                                  : `Must be within ${selectedService.follow_up_max_gap_weeks} week${selectedService.follow_up_max_gap_weeks === 1 ? "" : "s"} of the parent service.`}
+                              </small>
+                            </div>
+                          )}
+                          {selectedService.has_follow_up_services && selectedService.follow_up_services && selectedService.follow_up_services.length > 0 && (
+                            <div className="mt-3">
+                              <div className="alert alert-warning border-0 shadow-sm" role="alert">
+                                <div className="d-flex align-items-start">
+                                  <i className="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+                                  <div>
+                                    <strong className="text-warning">Are you sure you want to book this service?</strong>
+                                    <p className="mb-1 mt-2">
+                                      This service has a follow-up service available. If you've already completed this service before, you might want to book the follow-up service instead:
+                                    </p>
+                                    <ul className="mb-1 ps-3">
+                                      {selectedService.follow_up_services.map((followUp) => (
+                                        <li key={followUp.id}>
+                                          <strong>{followUp.name}</strong>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    <small className="text-muted">
+                                      Please confirm: Do you want to book <strong>{selectedService.name}</strong> (the parent service) or one of the follow-up services listed above?
+                                    </small>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           {isPerTeethService && (
                             <div className="mt-2">
                               <small className="text-info">

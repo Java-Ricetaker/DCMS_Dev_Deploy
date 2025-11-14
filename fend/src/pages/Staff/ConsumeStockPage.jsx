@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams, Navigate } from "react-router-dom";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 export default function ConsumeStockPage() {
   const { id } = useParams();            // visit id
@@ -43,10 +44,10 @@ export default function ConsumeStockPage() {
         ref_id: Number(id),
         notes: form.notes || null,
       });
-      alert("Stock consumed.");
+      toast.success("Stock consumed.");
       setForm({ item_id: "", quantity: "", notes: "" });
     } catch (err) {
-      alert(err?.response?.data?.message || "Consume failed");
+      toast.error(err?.response?.data?.message || "Consume failed");
     } finally {
       setSaving(false);
     }

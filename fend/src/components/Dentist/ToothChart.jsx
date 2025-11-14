@@ -1,6 +1,7 @@
 import { useState } from "react";
 import teethChartImage from "../../pages/Dentist/Teeth_Chart.png";
 import primaryTeethChartImage from "../../pages/Dentist/Primary_Teeth_Chart.png";
+import toast from "react-hot-toast";
 
 const ToothChart = ({ selectedTeeth = [], onTeethChange, showChart = false, onToggleChart, maxSelection = null }) => {
   const [activeTab, setActiveTab] = useState("adult"); // "adult" or "primary"
@@ -89,7 +90,7 @@ const ToothChart = ({ selectedTeeth = [], onTeethChange, showChart = false, onTo
     } else {
       // Check if we've reached the maximum selection limit
       if (maxSelection && newSelectedTeeth.length >= maxSelection) {
-        alert(`You can only select up to ${maxSelection} teeth as specified in the appointment.`);
+        toast.error(`You can only select up to ${maxSelection} teeth as specified in the appointment.`);
         return;
       }
       // Add tooth if not selected
@@ -120,7 +121,7 @@ const ToothChart = ({ selectedTeeth = [], onTeethChange, showChart = false, onTo
     // Apply max selection limit if specified
     if (maxSelection && allTeeth.length > maxSelection) {
       allTeeth = allTeeth.slice(0, maxSelection);
-      alert(`Selection limited to ${maxSelection} teeth as specified in the appointment.`);
+      toast(`Selection limited to ${maxSelection} teeth as specified in the appointment.`, { icon: "ℹ️" });
     }
     
     onTeethChange(allTeeth.join(','));

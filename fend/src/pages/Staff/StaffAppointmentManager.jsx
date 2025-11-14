@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 // Local helpers
 function onlyDate(v) {
@@ -45,7 +46,7 @@ export default function StaffAppointmentManager() {
       fetchAppointments();
     } catch (err) {
       console.error("Approve error:", err.response?.data || err.message);
-      alert(
+      toast.error(
         err.response?.data?.message ||
         err.response?.data?.error ||
         "Approval failed"
@@ -56,7 +57,7 @@ export default function StaffAppointmentManager() {
   };
 
   const openVerify = (appt) => {
-    if (appt.payment_method !== "hmo") return alert("Only for HMO payments");
+    if (appt.payment_method !== "hmo") return toast.error("Only for HMO payments");
     setVerifyId(appt.id);
     setVerifyAppt(appt);
     setVerifyPwd("");
@@ -70,12 +71,12 @@ export default function StaffAppointmentManager() {
       const { data } = await api.post(`/api/appointments/${verifyId}/hmo/reveal`, { password: verifyPwd });
       setRevealed(data);
     } catch (err) {
-      alert(err?.response?.data?.message || "Invalid password or error");
+      toast.error(err?.response?.data?.message || "Invalid password or error");
     }
   };
 
   const notifyCoverage = async () => {
-    if (!note.trim()) return alert("Please enter a note to send to the patient.");
+    if (!note.trim()) return toast.error("Please enter a note to send to the patient.");
     try {
       await api.post(`/api/appointments/${verifyId}/hmo/notify`, {
         message: note,
@@ -89,12 +90,12 @@ export default function StaffAppointmentManager() {
       setNote("");
       fetchAppointments();
     } catch (err) {
-      alert(err?.response?.data?.message || "Failed to send coverage update");
+      toast.error(err?.response?.data?.message || "Failed to send coverage update");
     }
   };
 
   const reject = async () => {
-    if (!note.trim()) return alert("Note is required");
+    if (!note.trim()) return toast.error("Note is required");
 
     setProcessingId(selected.id);
     try {
@@ -110,7 +111,7 @@ export default function StaffAppointmentManager() {
       fetchAppointments();
     } catch (err) {
       console.error("Reject error:", err.response?.data || err.message);
-      alert(err.response?.data?.error || "Rejection failed");
+      toast.error(err.response?.data?.error || "Rejection failed");
     } finally {
       setProcessingId(null);
     }

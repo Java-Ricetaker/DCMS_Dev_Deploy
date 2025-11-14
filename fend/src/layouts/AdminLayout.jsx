@@ -5,12 +5,15 @@ import api from "../api/api";
 import { useAuth } from "../hooks/useAuth";
 import "./AdminLayout.css";
 import NotificationsBell from "../components/NotificationBell";
+import ConfirmationModal from "../components/ConfirmationModal";
+import { Toaster } from "react-hot-toast";
 
 function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 992);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Role protection - only allow admin users
   useEffect(() => {
@@ -33,17 +36,27 @@ function AdminLayout() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const handleLogoutConfirm = async () => {
+    setShowLogoutModal(false);
     await logout();
     navigate("/");
   };
 
+  const handleLogoutCancel = () => {
+    setShowLogoutModal(false);
+  };
+
   return (
     <div className={`admin-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+      <Toaster position="top-center" />
       {/* Sidebar */}
       <aside className="sidebar  text-white">
         <div className="sidebar-header d-flex align-items-center justify-content-center position-relative">
-          <h5 className="m-0 fw-bold text-center w-100">Admin Panel</h5>
+          <h5 className="m-0 fw-bold text-center w-100">Admin</h5>
           <div className="d-flex align-items-center gap-2 position-absolute" style={{ right: '0.9rem', zIndex: 2 }}>
             {/* Close button (mobile) */}
             <button
@@ -249,7 +262,7 @@ function AdminLayout() {
             <li className="nav-item mt-4 px-3">
               <button
                 className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center icon-only-btn"
-                onClick={handleLogout}
+                onClick={handleLogoutClick}
                 title="Logout"
                 aria-label="Logout"
               >
@@ -277,8 +290,8 @@ function AdminLayout() {
     <i className="bi bi-list"></i>
   </button>
 
-  {/* push bell to the right without spacer */}
-  <div className="notifications-bell me-0">
+  {/* Notification bell next to hamburger menu */}
+  <div className="notifications-bell">
     <NotificationsBell />
   </div>
 </div>
@@ -293,7 +306,18 @@ function AdminLayout() {
       {/* Mobile overlay */}
       <div
         className={`sidebar-overlay ${sidebarOpen ? "show" : ""}`}
+        
         onClick={() => setSidebarOpen(false)}
+      />
+      <ConfirmationModal
+        show={showLogoutModal}
+        onConfirm={handleLogoutConfirm}
+        onCancel={handleLogoutCancel}
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You will need to login again to access your account."
+        confirmText="Logout"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );

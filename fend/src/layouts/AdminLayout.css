@@ -571,6 +571,9 @@ html {
   top: 0;
   z-index: 1040;
   padding: .5rem .75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* Ensure the bell never overlaps awkwardly */
@@ -581,11 +584,43 @@ html {
   z-index: auto !important;
 }
 
+/* Notification bell styling for light background */
+.topbar .notification-bell-btn {
+  background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%) !important;
+  border: none !important;
+  color: white !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 0.75rem !important;
+  transition: all 0.3s ease !important;
+}
+
+.topbar .notification-bell-btn:hover {
+  background: linear-gradient(135deg, #0096c7 0%, #0056b3 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(0, 119, 182, 0.3) !important;
+}
+
+.topbar .notification-bell-btn svg {
+  color: white !important;
+}
+
+.topbar .notifications-bell {
+  display: flex;
+  align-items: center;
+  margin-left: 0;
+}
+
 /* Optional: make toggle button fit the light topbar (or keep your gradient) */
 .toggle-btn{
   border: 1px solid #e2e8f0;
   background: #1e293b;
   color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+  padding: 0;
 }
 
 /* Logout button container */
@@ -1678,4 +1713,183 @@ html {
   .clinic-calendar-manager-page .table td:nth-child(6) {
     width: 15% !important;
   }
+}
+
+/* Manage Staff Account Page - Full responsive layout */
+.manage-staff-page {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 1.5rem !important;
+  box-sizing: border-box !important;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
+  min-height: calc(100vh - 56px) !important;
+  position: relative !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  contain: layout style paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.manage-staff-page .card {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+.manage-staff-page .card-body {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.manage-staff-page .table-responsive {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent horizontal scroll on page level */
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.manage-staff-page .table {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-bottom: 0 !important;
+}
+
+.manage-staff-page .table th,
+.manage-staff-page .table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  padding: 0.75rem !important;
+  min-width: 0;
+}
+
+/* Allow table to scroll horizontally on very small screens */
+@media (max-width: 575.98px) {
+  .manage-staff-page .table th,
+  .manage-staff-page .table td {
+    white-space: normal;
+    word-wrap: break-word;
+  }
+  
+  .manage-staff-page .table th:nth-child(1),
+  .manage-staff-page .table td:nth-child(1) {
+    min-width: 100px;
+  }
+  
+  .manage-staff-page .table th:nth-child(2),
+  .manage-staff-page .table td:nth-child(2) {
+    min-width: 150px;
+  }
+  
+  .manage-staff-page .table th:nth-child(3),
+  .manage-staff-page .table td:nth-child(3) {
+    min-width: 80px;
+  }
+  
+  .manage-staff-page .table th:nth-child(4),
+  .manage-staff-page .table td:nth-child(4) {
+    min-width: 90px;
+  }
+  
+  .manage-staff-page .table th:nth-child(5),
+  .manage-staff-page .table td:nth-child(5) {
+    min-width: 100px;
+  }
+}
+
+.manage-staff-page .input-group {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.manage-staff-page .nav-tabs {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.manage-staff-page .row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.manage-staff-page .col-12,
+.manage-staff-page .col-md-6,
+.manage-staff-page .col-lg-8,
+.manage-staff-page .col-xl-6 {
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+  .manage-staff-page {
+    padding: 1rem !important;
+  }
+  
+  .manage-staff-page .card-body {
+    padding: 1rem !important;
+  }
+  
+  .manage-staff-page .table th,
+  .manage-staff-page .table td {
+    padding: 0.5rem 0.5rem !important;
+    font-size: 0.875rem;
+  }
+  
+  .manage-staff-page .input-group {
+    min-width: 100% !important;
+  }
+  
+  .manage-staff-page .btn {
+    font-size: 0.875rem !important;
+    padding: 8px 16px !important;
+  }
+  
+  .manage-staff-page .nav-tabs .nav-link {
+    padding: 0.75rem 1rem !important;
+    font-size: 0.875rem !important;
+  }
+}
+
+/* Tablet responsive adjustments */
+@media (max-width: 991.98px) {
+  .manage-staff-page {
+    padding: 1.25rem !important;
+  }
+  
+  .manage-staff-page .card-body {
+    padding: 1.25rem !important;
+  }
+  
+  .manage-staff-page .input-group {
+    min-width: 100% !important;
+  }
+}
+
+/* Ensure no horizontal scroll on any screen size */
+.manage-staff-page,
+.manage-staff-page * {
+  box-sizing: border-box !important;
+}
+
+/* Ensure Manage Staff Account adapts to sidebar state changes */
+.admin-shell.sidebar-closed .manage-staff-page,
+.admin-shell.sidebar-open .manage-staff-page {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 1.5rem !important;
+  position: relative !important;
+  transition: none !important;
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 export default function InventoryItemForm({ onCreated }) {
   const [form, setForm] = useState({
@@ -27,7 +28,7 @@ export default function InventoryItemForm({ onCreated }) {
       setForm({ name:"", sku_code:"", type:"supply", unit:"pcs", low_stock_threshold:0, default_pack_size:"", is_controlled:false, is_sellable: false, patient_price: "", sellable_notes: "", notes:"" });
       onCreated?.();
     } catch (err) {
-      alert(err?.response?.data?.message || "Failed to save item");
+      toast.error(err?.response?.data?.message || "Failed to save item");
     } finally {
       setSaving(false);
     }

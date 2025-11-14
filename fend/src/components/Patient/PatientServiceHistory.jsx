@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import api from "../../api/api";
 import teethChartImage from "../../pages/Dentist/Teeth_Chart.png";
+import primaryTeethChartImage from "../../pages/Dentist/Primary_Teeth_Chart.png";
+import toast from "react-hot-toast";
 
 const PatientServiceHistory = () => {
   const [visits, setVisits] = useState([]);
@@ -8,6 +10,7 @@ const PatientServiceHistory = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [meta, setMeta] = useState({});
   const [showToothChart, setShowToothChart] = useState(false);
+  const [activeChartTab, setActiveChartTab] = useState("adult");
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   const [downloadingReceipt, setDownloadingReceipt] = useState(null);
@@ -132,7 +135,7 @@ const PatientServiceHistory = () => {
     } catch (err) {
       console.error("Failed to download receipt", err);
       const serverMsg = err.response?.data?.message || "Failed to download receipt. Please try again.";
-      alert(serverMsg);
+      toast.error(serverMsg);
     } finally {
       setDownloadingReceipt(null);
     }
@@ -149,7 +152,15 @@ const PatientServiceHistory = () => {
           <div className="d-flex gap-2">
             <button 
               className="btn btn-sm btn-outline-light"
-              onClick={() => setShowToothChart(!showToothChart)}
+              onClick={() => {
+                setShowToothChart((prev) => {
+                  const next = !prev;
+                  if (next) {
+                    setActiveChartTab("adult");
+                  }
+                  return next;
+                });
+              }}
               title="Tooth Chart Reference"
             >
               <i className="bi bi-tooth me-1"></i>
@@ -254,94 +265,172 @@ const PatientServiceHistory = () => {
       </div>
       
       {/* Tooth Chart Reference Panel */}
-      {showToothChart && (
-        <div 
-          className="border-bottom"
-          style={{
-            backgroundColor: 'rgba(248, 249, 250, 0.95)',
-            opacity: 0.95,
-            padding: '15px',
-            border: '1px solid #e5e7eb',
-            borderRadius: '0'
-          }}
-        >
-          <div className="row">
-            <div className="col-md-6">
-              <div className="text-center">
-                <img 
-                  src={teethChartImage} 
-                  alt="Dental Chart Reference" 
-                  className="img-fluid"
-                  style={{ 
-                    maxWidth: '250px', 
-                    height: 'auto',
-                    border: '1px solid #dee2e6',
-                    borderRadius: '8px',
-                    backgroundColor: '#f8f9fa'
-                  }}
-                />
-                <small className="text-muted d-block mt-2">Reference Chart</small>
+      {showToothChart && (() => {
+        const adultUpperTeeth = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+        const adultLowerTeeth = [32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17];
+        const primaryUpperTeeth = ["A","B","C","D","E","F","G","H","I","J"];
+        const primaryLowerTeeth = ["K","L","M","N","O","P","Q","R","S","T"];
+
+        return (
+          <div 
+            className="border-bottom"
+            style={{
+              backgroundColor: 'rgba(248, 249, 250, 0.95)',
+              opacity: 0.95,
+              padding: '15px',
+              border: '1px solid #e5e7eb',
+              borderRadius: '0'
+            }}
+          >
+            <div className="row align-items-center">
+              <div className="col-md-5 mb-3 mb-md-0">
+                <div className="text-center">
+                  <img 
+                    src={activeChartTab === "adult" ? teethChartImage : primaryTeethChartImage} 
+                    alt={activeChartTab === "adult" ? "Adult Teeth Chart Reference" : "Primary Teeth Chart Reference"} 
+                    className="img-fluid"
+                    style={{ 
+                      maxWidth: '250px', 
+                      height: 'auto',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '8px',
+                      backgroundColor: '#f8f9fa'
+                    }}
+                  />
+                  <small className="text-muted d-block mt-2">
+                    {activeChartTab === "adult" ? "Adult Teeth Reference Chart" : "Primary Teeth Reference Chart"}
+                  </small>
+                </div>
               </div>
-            </div>
-            <div className="col-md-6">
-              <div className="text-center">
-                <h6 className="text-primary mb-3">Universal Numbering System</h6>
-                
-                {/* Upper Teeth Layout */}
-                <div className="mb-3">
-                  <small className="text-muted d-block mb-2">UPPER TEETH (1-16)</small>
-                  <div className="d-flex justify-content-center flex-wrap gap-1">
-                    {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16].map(toothNumber => (
-                      <span
-                        key={toothNumber}
-                        className="badge bg-light text-dark border"
-                        style={{ 
-                          width: '18px', 
-                          height: '18px',
-                          fontSize: '9px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        {toothNumber}
-                      </span>
-                    ))}
+              <div className="col-md-7">
+                <div className="text-center mb-3">
+                  <div className="btn-group" role="group" aria-label="Tooth chart tabs">
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${activeChartTab === "adult" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setActiveChartTab("adult")}
+                    >
+                      <i className="bi bi-person me-1"></i>
+                      Adult Teeth (1-32)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${activeChartTab === "primary" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setActiveChartTab("primary")}
+                    >
+                      <i className="bi bi-person-heart me-1"></i>
+                      Primary Teeth (A-T)
+                    </button>
                   </div>
                 </div>
-                
-                {/* Lower Teeth Layout */}
-                <div className="mb-2">
-                  <small className="text-muted d-block mb-2">LOWER TEETH (32-17)</small>
-                  <div className="d-flex justify-content-center flex-wrap gap-1">
-                    {[32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17].map(toothNumber => (
-                      <span
-                        key={toothNumber}
-                        className="badge bg-light text-dark border"
-                        style={{ 
-                          width: '18px', 
-                          height: '18px',
-                          fontSize: '9px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        {toothNumber}
-                      </span>
-                    ))}
+
+                <div className="text-center">
+                  <h6 className="text-primary mb-3">
+                    Universal Numbering System
+                  </h6>
+
+                  {activeChartTab === "adult" ? (
+                    <>
+                      <div className="mb-3">
+                        <small className="text-muted d-block mb-2">UPPER TEETH (1-16)</small>
+                        <div className="d-flex justify-content-center flex-wrap gap-1">
+                          {adultUpperTeeth.map((toothNumber) => (
+                            <span
+                              key={toothNumber}
+                              className="badge bg-light text-dark border"
+                              style={{ 
+                                width: '20px', 
+                                height: '20px',
+                                fontSize: '11px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {toothNumber}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mb-2">
+                        <small className="text-muted d-block mb-2">LOWER TEETH (32-17)</small>
+                        <div className="d-flex justify-content-center flex-wrap gap-1">
+                          {adultLowerTeeth.map((toothNumber) => (
+                            <span
+                              key={toothNumber}
+                              className="badge bg-light text-dark border"
+                              style={{ 
+                                width: '20px', 
+                                height: '20px',
+                                fontSize: '11px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {toothNumber}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mb-3">
+                        <small className="text-muted d-block mb-2">UPPER TEETH (A-J)</small>
+                        <div className="d-flex justify-content-center flex-wrap gap-1">
+                          {primaryUpperTeeth.map((letter) => (
+                            <span
+                              key={letter}
+                              className="badge bg-light text-dark border"
+                              style={{ 
+                                width: '20px', 
+                                height: '20px',
+                                fontSize: '11px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {letter}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mb-2">
+                        <small className="text-muted d-block mb-2">LOWER TEETH (T-K)</small>
+                        <div className="d-flex justify-content-center flex-wrap gap-1">
+                          {primaryLowerTeeth.map((letter) => (
+                            <span
+                              key={letter}
+                              className="badge bg-light text-dark border"
+                              style={{ 
+                                width: '20px', 
+                                height: '20px',
+                                fontSize: '11px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              {letter}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="alert alert-info py-2 mb-0" style={{ fontSize: '11px' }}>
+                    <i className="bi bi-info-circle me-1"></i>
+                    Use this chart to understand which teeth were treated
                   </div>
-                </div>
-                
-                <div className="alert alert-info py-2 mb-0" style={{ fontSize: '11px' }}>
-                  <i className="bi bi-info-circle me-1"></i>
-                  Use this chart to understand which teeth were treated
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       
       <div className="card-body p-0">
         <div className="table-responsive">

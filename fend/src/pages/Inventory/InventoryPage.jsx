@@ -5,6 +5,7 @@ import ReceiveStockForm from "./ReceiveStockForm";
 import ConsumeStockForm from "./ConsumeStockForm";
 import AdjustStockForm from "./AdjustStockForm";
 import Modal from "../../components/Modal";
+import toast from "react-hot-toast";
 
 /** Admin-only settings card with improved design */
 function InventorySettingsCard() {
@@ -30,9 +31,9 @@ function InventorySettingsCard() {
     setSaving(true);
     try {
       await api.patch("/api/inventory/settings", form);
-      alert("Settings saved.");
+      toast.success("Settings saved.");
     } catch (e) {
-      alert(e?.response?.data?.message || "Save failed");
+      toast.error(e?.response?.data?.message || "Save failed");
     } finally {
       setSaving(false);
     }

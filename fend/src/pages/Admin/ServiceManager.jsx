@@ -26,6 +26,9 @@ export default function ServiceManager() {
     special_start_date: "",
     special_end_date: "",
     bundled_service_ids: [],
+    is_follow_up: false,
+    follow_up_parent_service_id: "",
+    follow_up_max_gap_weeks: "",
   });
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -95,6 +98,13 @@ export default function ServiceManager() {
         [name]: checked,
         per_teeth_service: false,
       });
+    } else if (name === "is_follow_up") {
+      setFormData((prev) => ({
+        ...prev,
+        is_follow_up: checked,
+        follow_up_parent_service_id: checked ? prev.follow_up_parent_service_id : "",
+        follow_up_max_gap_weeks: checked ? prev.follow_up_max_gap_weeks : "",
+      }));
     } else {
       setFormData({
         ...formData,
@@ -135,10 +145,22 @@ export default function ServiceManager() {
 
   const saveService = async () => {
     try {
+      const payload = {
+        ...formData,
+        follow_up_parent_service_id:
+          formData.is_follow_up && formData.follow_up_parent_service_id
+            ? Number(formData.follow_up_parent_service_id)
+            : null,
+        follow_up_max_gap_weeks:
+          formData.follow_up_max_gap_weeks === ""
+            ? null
+            : Number(formData.follow_up_max_gap_weeks),
+      };
+
       if (isEditMode) {
-        await api.put(`/api/services/${editingId}`, formData);
+        await api.put(`/api/services/${editingId}`, payload);
       } else {
-        await api.post("/api/services", formData);
+        await api.post("/api/services", payload);
       }
       setShowModal(false);
       fetchServices();
@@ -167,6 +189,9 @@ export default function ServiceManager() {
       special_start_date: "",
       special_end_date: "",
       bundled_service_ids: [],
+      is_follow_up: false,
+      follow_up_parent_service_id: "",
+      follow_up_max_gap_weeks: "",
     });
     setIsEditMode(false);
     setEditingId(null);
@@ -186,6 +211,15 @@ export default function ServiceManager() {
       special_start_date: service.special_start_date || "",
       special_end_date: service.special_end_date || "",
       bundled_service_ids: service.bundled_services?.map((s) => s.id) || [],
+      is_follow_up: service.is_follow_up || false,
+      follow_up_parent_service_id: service.follow_up_parent_service_id
+        ? service.follow_up_parent_service_id.toString()
+        : "",
+      follow_up_max_gap_weeks:
+        service.follow_up_max_gap_weeks !== null &&
+        service.follow_up_max_gap_weeks !== undefined
+          ? service.follow_up_max_gap_weeks.toString()
+          : "",
     });
     setEditingId(service.id);
     setIsEditMode(true);
@@ -323,6 +357,9 @@ export default function ServiceManager() {
                 <th className="fw-semibold px-4 py-3 border-0" style={{ fontSize: '1.1rem' }}>
                   <i className="bi bi-tooth me-2"></i>Per Teeth
                 </th>
+                <th className="fw-semibold px-4 py-3 border-0" style={{ fontSize: '1.1rem' }}>
+                  <i className="bi bi-arrow-return-right me-2"></i>Follow-up
+                </th>
                 <th className="fw-semibold px-4 py-3 border-0 text-center" style={{ fontSize: '1.1rem' }}>
                   <i className="bi bi-gear me-2"></i>Actions
                 </th>
@@ -331,7 +368,7 @@ export default function ServiceManager() {
             <tbody>
               {filteredServices.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-5">
+                  <td colSpan="10" className="text-center py-5">
                     <div className="text-muted">
                       <i className="bi bi-inbox display-4 d-block mb-3"></i>
                       <h5>No services found</h5>
@@ -410,6 +447,23 @@ export default function ServiceManager() {
                     <span className={`badge ${service.per_teeth_service ? 'bg-info' : 'bg-secondary'}`}>
                       {service.per_teeth_service ? "Yes" : "No"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 border-0" style={{ fontSize: '1rem' }}>
+                    {service.is_follow_up ? (
+                      <div className="d-flex flex-column">
+                        <span className="badge bg-primary text-white align-self-start mb-1">Follow-up</span>
+                        <small className="text-muted">
+                          Parent: {service.follow_up_parent?.name || "—"}
+                        </small>
+                        <small className="text-muted">
+                          Gap: {service.follow_up_max_gap_weeks ?? "No limit"}
+                          {(service.follow_up_max_gap_weeks !== null && service.follow_up_max_gap_weeks !== undefined) &&
+                            ` wk${service.follow_up_max_gap_weeks === 1 ? '' : 's'}`}
+                        </small>
+                      </div>
+                    ) : (
+                      <span className="text-muted">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center border-0">
                     <div className="btn-group" role="group">
@@ -708,6 +762,87 @@ export default function ServiceManager() {
                     <strong>Warning:</strong> Per Teeth Service is only available for solo services. 
                     Since this service is marked as Special/Package, the Per Teeth option has been turned off.
                   </div>
+                )}
+                <div className="form-check mb-3">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="isFollowUp"
+                    name="is_follow_up"
+                    checked={formData.is_follow_up}
+                    onChange={handleChange}
+                  />
+                  <label className="form-check-label" htmlFor="isFollowUp">
+                    Mark as Follow-up Service
+                    <br />
+                    <small className="text-muted">
+                      Limits availability to patients who recently completed a chosen parent service.
+                    </small>
+                  </label>
+                </div>
+                {formData.is_follow_up && (
+                  <>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Parent Service <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        name="follow_up_parent_service_id"
+                        className={`form-select ${
+                          formErrors.follow_up_parent_service_id ? "is-invalid" : ""
+                        }`}
+                        value={formData.follow_up_parent_service_id}
+                        onChange={handleChange}
+                      >
+                        <option value="">-- Select Parent Service --</option>
+                        {services
+                          .filter((service) => {
+                            const isSelf = isEditMode && service.id === editingId;
+                            const isActive = service.is_active !== false;
+                            return !isSelf && isActive;
+                          })
+                          .map((service) => (
+                            <option key={service.id} value={service.id}>
+                              {service.name}
+                            </option>
+                          ))}
+                      </select>
+                      {formErrors.follow_up_parent_service_id && (
+                        <div className="invalid-feedback">
+                          {formErrors.follow_up_parent_service_id[0]}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Maximum Allowable Gap (weeks){" "}
+                        <small className="text-muted">(optional)</small>
+                      </label>
+                      <input
+                        type="number"
+                        name="follow_up_max_gap_weeks"
+                        className={`form-control ${
+                          formErrors.follow_up_max_gap_weeks ? "is-invalid" : ""
+                        }`}
+                        value={formData.follow_up_max_gap_weeks}
+                        onChange={handleChange}
+                        min="0"
+                      />
+                      <div className="form-text">
+                        Leave blank to allow follow-ups regardless of elapsed time.
+                      </div>
+                      {formErrors.follow_up_max_gap_weeks && (
+                        <div className="invalid-feedback d-block">
+                          {formErrors.follow_up_max_gap_weeks[0]}
+                        </div>
+                      )}
+                    </div>
+                    <div className="alert alert-info" role="alert">
+                      <i className="bi bi-info-circle me-2"></i>
+                      Patients must complete the parent service before they can see or book this follow-up online.
+                      Staff can always override this requirement for walk-ins.
+                    </div>
+                  </>
                 )}
                 {formData.is_special && (
                   <div className="mb-3">

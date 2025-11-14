@@ -99,6 +99,88 @@ class ReportController extends Controller
         ]);
     }
 
+    public function visitsDaily(Request $request)
+    {
+        $date = $request->query('date'); // expected format YYYY-MM-DD
+
+        if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $start = now()->startOfDay();
+        } else {
+            try {
+                $start = Carbon::createFromFormat('Y-m-d', $date)->startOfDay();
+            } catch (\Exception $e) {
+                $start = now()->startOfDay();
+            }
+        }
+
+        $end = (clone $start)->endOfDay();
+
+        // Base scope: visits that started within the day
+        $base = DB::table('patient_visits as v')
+            ->whereNotNull('v.start_time')
+            ->whereBetween('v.start_time', [$start, $end]);
+
+        // By hour (0-23)
+        $byHourRows = (clone $base)
+            ->selectRaw('HOUR(v.start_time) as hour, COUNT(*) as count')
+            ->groupBy('hour')
+            ->orderBy('hour')
+            ->get();
+
+        // By visit type (infer appointment vs walk-in using correlated subquery)
+        $byVisitTypeRows = (clone $base)
+            ->selectRaw(
+                "CASE WHEN EXISTS (\n" .
+                "  SELECT 1 FROM appointments a\n" .
+                "  WHERE a.patient_id = v.patient_id\n" .
+                "    AND a.service_id = v.service_id\n" .
+                "    AND a.date = v.visit_date\n" .
+                "    AND a.status IN ('approved','completed')\n" .
+                ") THEN 'appointment' ELSE 'walkin' END as visit_type, COUNT(*) as count"
+            )
+            ->groupBy('visit_type')
+            ->orderBy('visit_type')
+            ->get();
+
+        // By service with walk-in/appointment breakdown
+        $byServiceRows = (clone $base)
+            ->leftJoin('services as s', 's.id', '=', 'v.service_id')
+            ->selectRaw(
+                "v.service_id, " .
+                "COALESCE(s.name, '(Unspecified)') as service_name, " .
+                "COUNT(*) as count, " .
+                "SUM(CASE WHEN EXISTS (\n" .
+                "  SELECT 1 FROM appointments a\n" .
+                "  WHERE a.patient_id = v.patient_id\n" .
+                "    AND a.service_id = v.service_id\n" .
+                "    AND a.date = v.visit_date\n" .
+                "    AND a.status IN ('approved','completed')\n" .
+                ") THEN 0 ELSE 1 END) as walkin, " .
+                "SUM(CASE WHEN EXISTS (\n" .
+                "  SELECT 1 FROM appointments a\n" .
+                "  WHERE a.patient_id = v.patient_id\n" .
+                "    AND a.service_id = v.service_id\n" .
+                "    AND a.date = v.visit_date\n" .
+                "    AND a.status IN ('approved','completed')\n" .
+                ") THEN 1 ELSE 0 END) as appointment"
+            )
+            ->groupBy('v.service_id', 's.name')
+            ->orderByDesc('count')
+            ->get();
+
+        return response()->json([
+            'date' => $start->format('Y-m-d'),
+            'by_hour' => $byHourRows->map(function ($r) {
+                return [
+                    'hour' => $r->hour,
+                    'count' => $r->count,
+                ];
+            }),
+            'by_visit_type' => $byVisitTypeRows,
+            'by_service' => $byServiceRows,
+        ]);
+    }
+
     public function analyticsSummary(Request $request)
     {
         // Accept either 'month' or 'period' (YYYY-MM). Default: current month

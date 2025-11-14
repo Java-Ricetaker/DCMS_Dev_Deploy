@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 const computeAge = (dateStr) => {
   if (!dateStr) return "";
@@ -117,7 +118,7 @@ export default function MedicalHistoryFormModal({ visit, onClose, onSuccess }) {
       const response = await api.post(`/api/visits/${visit.id}/medical-history`, formData);
       
       // Show success message with visit code
-      alert(`Medical history completed successfully!\n\nVisit Code: ${response.data.visit.visit_code}\n\nYou can now send this code to the dentist.`);
+      toast.success(`Medical history completed successfully!\n\nVisit Code: ${response.data.visit.visit_code}\n\nYou can now send this code to the dentist.`);
       
       if (onSuccess) {
         onSuccess(response.data);

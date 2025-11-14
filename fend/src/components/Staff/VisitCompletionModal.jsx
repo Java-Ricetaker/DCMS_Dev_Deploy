@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 export default function VisitCompletionModal({ visit, onClose, onComplete }) {
   const [step, setStep] = useState(1); // 1: Stock, 2: Notes, 3: Payment
@@ -149,21 +150,21 @@ export default function VisitCompletionModal({ visit, onClose, onComplete }) {
 
         if (emailResponse.data.note) {
           // Email was skipped (likely seeded data)
-          alert(`Visit completed successfully!\n\n${emailResponse.data.message}\n\n${emailResponse.data.note}`);
+          toast.success(`Visit completed successfully!\n\n${emailResponse.data.message}\n\n${emailResponse.data.note}`);
         } else {
           // Email was sent successfully
-          alert(`Visit completed successfully!\n\nReceipt sent to: ${emailResponse.data.email}`);
+          toast.success(`Visit completed successfully!\n\nReceipt sent to: ${emailResponse.data.email}`);
         }
       } catch (emailErr) {
         // Email sending failed, but visit completion was successful
         console.error("Failed to send receipt email:", emailErr);
-        alert(`Visit completed successfully!\n\nNote: Receipt email could not be sent. Patient can download receipt from their appointments page.`);
+        toast.success(`Visit completed successfully!\n\nNote: Receipt email could not be sent. Patient can download receipt from their appointments page.`);
       }
 
       onComplete();
       onClose();
     } catch (err) {
-      alert(err?.response?.data?.message || "Failed to complete visit");
+      toast.error(err?.response?.data?.message || "Failed to complete visit");
     } finally {
       setPendingPayload(null);
       setWarningAcknowledged(false);

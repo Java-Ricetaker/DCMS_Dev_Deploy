@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../api/api";
 import ExcelJS from 'exceljs';
 import { addClinicHeader } from "../../utils/pdfHeader";
+import toast from "react-hot-toast";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -334,52 +335,61 @@ export default function AdminAnalyticsDashboard() {
       doc.save(`analytics-report-${month}.pdf`);
     } catch (e) {
       console.error(e);
-      alert("Failed to generate PDF.");
+      toast.error("Failed to generate PDF.");
     }
   };
 
   const downloadExcel = async () => {
     try {
+      const { styleHeaderRow, styleDataRow, addWorksheetHeader, formatCurrency, formatPercentage, styleTotalRow } = await import("../../utils/excelStyling");
       const workbook = new ExcelJS.Workbook();
       
       // KPI Overview Sheet
       const kpiSheet = workbook.addWorksheet('KPI Overview');
-      kpiSheet.addRow(['Metric', 'Current Value', 'Previous Value', 'Change (%)', 'Trend Status']);
-      kpiSheet.addRow(['Total Visits', k?.total_visits?.value ?? 0, k?.total_visits?.prev ?? 0, k?.total_visits?.pct_change ?? 0, (k?.total_visits?.pct_change ?? 0) >= 0 ? "Positive" : "Negative"]);
-      kpiSheet.addRow(['Approved Appointments', k?.approved_appointments?.value ?? 0, k?.approved_appointments?.prev ?? 0, k?.approved_appointments?.pct_change ?? 0, (k?.approved_appointments?.pct_change ?? 0) >= 0 ? "Positive" : "Negative"]);
-      kpiSheet.addRow(['No-shows', k?.no_shows?.value ?? 0, k?.no_shows?.prev ?? 0, k?.no_shows?.pct_change ?? 0, 
-        // For no-shows: lower is better, so we need to reverse the logic
-        (() => {
-          const current = k?.no_shows?.value ?? 0;
-          const previous = k?.no_shows?.prev ?? 0;
-          const change = k?.no_shows?.pct_change ?? 0;
-          
-          // If both are 0, it's excellent
-          if (current === 0 && previous === 0) return "Excellent";
-          
-          // If current is 0 but previous was > 0, it's improving
-          if (current === 0 && previous > 0) return "Excellent";
-          
-          // If previous was 0 but current is > 0, it's concerning
-          if (previous === 0 && current > 0) return "Concerning";
-          
-          // For normal cases, increasing no-shows is concerning, decreasing is improving
-          return change >= 0 ? "Concerning" : "Improving";
-        })()
-      ]);
-      kpiSheet.addRow(['Avg Visit Duration (min)', k?.avg_visit_duration_min?.value ?? 0, k?.avg_visit_duration_min?.prev ?? 0, k?.avg_visit_duration_min?.pct_change ?? 0, (k?.avg_visit_duration_min?.pct_change ?? 0) >= 0 ? "Longer" : "Shorter"]);
+      let startRow = addWorksheetHeader(kpiSheet, 'Analytics Dashboard Report', `Report Period: ${month}`);
       
-      // Format Total Revenue row with currency formatting
+      // Add header row
+      const headerRow = kpiSheet.addRow(['Metric', 'Current Value', 'Previous Value', 'Change (%)', 'Trend Status']);
+      styleHeaderRow(headerRow);
+      
+      // Add data rows
+      const dataRows = [
+        ['Total Visits', k?.total_visits?.value ?? 0, k?.total_visits?.prev ?? 0, (k?.total_visits?.pct_change ?? 0) / 100, (k?.total_visits?.pct_change ?? 0) >= 0 ? "Positive" : "Negative"],
+        ['Approved Appointments', k?.approved_appointments?.value ?? 0, k?.approved_appointments?.prev ?? 0, (k?.approved_appointments?.pct_change ?? 0) / 100, (k?.approved_appointments?.pct_change ?? 0) >= 0 ? "Positive" : "Negative"],
+        ['No-shows', k?.no_shows?.value ?? 0, k?.no_shows?.prev ?? 0, (k?.no_shows?.pct_change ?? 0) / 100, 
+          (() => {
+            const current = k?.no_shows?.value ?? 0;
+            const previous = k?.no_shows?.prev ?? 0;
+            const change = k?.no_shows?.pct_change ?? 0;
+            if (current === 0 && previous === 0) return "Excellent";
+            if (current === 0 && previous > 0) return "Excellent";
+            if (previous === 0 && current > 0) return "Concerning";
+            return change >= 0 ? "Concerning" : "Improving";
+          })()
+        ],
+        ['Avg Visit Duration (min)', k?.avg_visit_duration_min?.value ?? 0, k?.avg_visit_duration_min?.prev ?? 0, (k?.avg_visit_duration_min?.pct_change ?? 0) / 100, (k?.avg_visit_duration_min?.pct_change ?? 0) >= 0 ? "Longer" : "Shorter"]
+      ];
+      
+      dataRows.forEach((rowData, index) => {
+        const row = kpiSheet.addRow(rowData);
+        styleDataRow(row, index);
+        // Format percentage column (index 3)
+        formatPercentage(row.getCell(4));
+      });
+      
+      // Format Total Revenue row
       const revenueRow = kpiSheet.addRow([
         'Total Revenue', 
-        `₱${(k?.total_revenue?.value ?? 0).toLocaleString()}`, 
-        `₱${(k?.total_revenue?.prev ?? 0).toLocaleString()}`, 
-        k?.total_revenue?.pct_change ?? 0, 
+        k?.total_revenue?.value ?? 0, 
+        k?.total_revenue?.prev ?? 0, 
+        (k?.total_revenue?.pct_change ?? 0) / 100, 
         (k?.total_revenue?.pct_change ?? 0) >= 0 ? "Growth" : "Decline"
       ]);
+      styleTotalRow(revenueRow);
+      formatCurrency(revenueRow.getCell(2));
+      formatCurrency(revenueRow.getCell(3));
+      formatPercentage(revenueRow.getCell(4));
       
-      // Style header row
-      kpiSheet.getRow(1).font = { bold: true };
       kpiSheet.columns = [
         { width: 25 },
         { width: 20 },
@@ -390,13 +400,23 @@ export default function AdminAnalyticsDashboard() {
 
       // Payment Method Share Sheet
       const paymentSheet = workbook.addWorksheet('Payment Methods');
-      paymentSheet.addRow(['Payment Method', 'Count', 'Percentage']);
-      paymentSheet.addRow(['Cash', k?.payment_method_share?.cash?.count ?? 0, k?.payment_method_share?.cash?.share_pct ?? 0]);
-      paymentSheet.addRow(['HMO', k?.payment_method_share?.hmo?.count ?? 0, k?.payment_method_share?.hmo?.share_pct ?? 0]);
-      paymentSheet.addRow(['Maya', k?.payment_method_share?.maya?.count ?? 0, k?.payment_method_share?.maya?.share_pct ?? 0]);
+      startRow = addWorksheetHeader(paymentSheet, 'Payment Method Analysis', `Report Period: ${month}`);
       
-      // Style header row
-      paymentSheet.getRow(1).font = { bold: true };
+      const paymentHeaderRow = paymentSheet.addRow(['Payment Method', 'Count', 'Percentage']);
+      styleHeaderRow(paymentHeaderRow);
+      
+      const paymentData = [
+        ['Cash', k?.payment_method_share?.cash?.count ?? 0, (k?.payment_method_share?.cash?.share_pct ?? 0) / 100],
+        ['HMO', k?.payment_method_share?.hmo?.count ?? 0, (k?.payment_method_share?.hmo?.share_pct ?? 0) / 100],
+        ['Maya', k?.payment_method_share?.maya?.count ?? 0, (k?.payment_method_share?.maya?.share_pct ?? 0) / 100]
+      ];
+      
+      paymentData.forEach((rowData, index) => {
+        const row = paymentSheet.addRow(rowData);
+        styleDataRow(row, index);
+        formatPercentage(row.getCell(3));
+      });
+      
       paymentSheet.columns = [
         { width: 20 },
         { width: 12 },
@@ -406,19 +426,24 @@ export default function AdminAnalyticsDashboard() {
       // Revenue by Service Sheet
       if (data?.top_revenue_services?.length > 0) {
         const serviceSheet = workbook.addWorksheet('Revenue by Service');
-        serviceSheet.addRow(['Service', 'Current Revenue', 'Previous Revenue', 'Change (%)']);
+        startRow = addWorksheetHeader(serviceSheet, 'Revenue by Service', `Report Period: ${month}`);
         
-        data.top_revenue_services.forEach(service => {
-          serviceSheet.addRow([
+        const serviceHeaderRow = serviceSheet.addRow(['Service', 'Current Revenue', 'Previous Revenue', 'Change (%)']);
+        styleHeaderRow(serviceHeaderRow);
+        
+        data.top_revenue_services.forEach((service, index) => {
+          const row = serviceSheet.addRow([
             service.service_name,
-            `₱${(service.revenue || 0).toLocaleString()}`,
-            `₱${(service.prev_revenue || 0).toLocaleString()}`,
-            service.pct_change || 0
+            service.revenue || 0,
+            service.prev_revenue || 0,
+            (service.pct_change || 0) / 100
           ]);
+          styleDataRow(row, index);
+          formatCurrency(row.getCell(2));
+          formatCurrency(row.getCell(3));
+          formatPercentage(row.getCell(4));
         });
         
-        // Style header row
-        serviceSheet.getRow(1).font = { bold: true };
         serviceSheet.columns = [
           { width: 30 },
           { width: 20 },
@@ -431,38 +456,32 @@ export default function AdminAnalyticsDashboard() {
       if (trendData?.labels?.length > 0) {
         const trendSheet = workbook.addWorksheet('Trend Analysis');
         
-        // Add metadata rows
-        trendSheet.addRow(['Report Configuration']);
-        trendSheet.addRow(['Metric Selected:', selectedMetric.charAt(0).toUpperCase() + selectedMetric.slice(1)]);
-        trendSheet.addRow(['Time Range:', `${trendData.labels.length} periods`]);
-        
-        if (selectedMetric === 'revenue') {
-          if (revenueTimeframe) {
-            trendSheet.addRow(['Time Period:', revenueTimeframe.charAt(0).toUpperCase() + revenueTimeframe.slice(1)]);
-          }
-          if (revenueStartDate && revenueEndDate) {
-            trendSheet.addRow(['Custom Date Range:', `${revenueStartDate} to ${revenueEndDate}`]);
-          }
+        let subtitle = `Metric: ${selectedMetric.charAt(0).toUpperCase() + selectedMetric.slice(1)} | Time Range: ${trendData.labels.length} periods`;
+        if (selectedMetric === 'revenue' && revenueTimeframe) {
+          subtitle += ` | Period: ${revenueTimeframe.charAt(0).toUpperCase() + revenueTimeframe.slice(1)}`;
+        }
+        if (selectedMetric === 'revenue' && revenueStartDate && revenueEndDate) {
+          subtitle += ` | Custom Range: ${revenueStartDate} to ${revenueEndDate}`;
         }
         
-        trendSheet.addRow([]); // Empty row
-        trendSheet.addRow(['Period', 'Visits', 'Appointments', 'Revenue', 'Loss']);
+        startRow = addWorksheetHeader(trendSheet, 'Trend Analysis', subtitle);
+        
+        const trendHeaderRow = trendSheet.addRow(['Period', 'Visits', 'Appointments', 'Revenue', 'Loss']);
+        styleHeaderRow(trendHeaderRow);
         
         trendData.labels.forEach((label, index) => {
-          trendSheet.addRow([
+          const row = trendSheet.addRow([
             label,
             trendData.visits?.[index] ?? 0,
             trendData.appointments?.[index] ?? 0,
-            `₱${(trendData.revenue?.[index] ?? 0).toLocaleString()}`,
-            `₱${(trendData.loss?.[index] ?? 0).toLocaleString()}`
+            trendData.revenue?.[index] ?? 0,
+            trendData.loss?.[index] ?? 0
           ]);
+          styleDataRow(row, index);
+          formatCurrency(row.getCell(4));
+          formatCurrency(row.getCell(5));
         });
         
-        // Style header rows
-        trendSheet.getRow(1).font = { bold: true };
-        const headerRowIndex = selectedMetric === 'revenue' && revenueStartDate && revenueEndDate ? 7 : 
-                              selectedMetric === 'revenue' && revenueTimeframe ? 6 : 5;
-        trendSheet.getRow(headerRowIndex).font = { bold: true }; // Data header row
         trendSheet.columns = [
           { width: 20 },
           { width: 12 },
@@ -483,7 +502,7 @@ export default function AdminAnalyticsDashboard() {
       window.URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      alert("Failed to generate Excel file.");
+      toast.error("Failed to generate Excel file.");
     }
   };
 
@@ -2050,7 +2069,7 @@ export default function AdminAnalyticsDashboard() {
                                     // Copy actions to clipboard or show detailed view
                                     const actionsText = insight.actions.join('\n• ');
                                     navigator.clipboard.writeText(`Actions for ${insight.title}:\n• ${actionsText}`);
-                                    alert('Actions copied to clipboard!');
+                                    toast.success('Actions copied to clipboard!');
                                   }}
                                 >
                                   Copy Actions

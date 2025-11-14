@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api/api";
 import ExcelJS from 'exceljs';
+import toast from "react-hot-toast";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -379,22 +380,32 @@ export default function AdminMonthlyReport() {
       doc.save(`visits-report-${month}.pdf`);
     } catch (e) {
       console.error(e);
-      alert("Failed to generate PDF.");
+      toast.error("Failed to generate PDF.");
     }
   };
 
   const downloadExcel = async () => {
     try {
+      const { styleHeaderRow, styleDataRow, addWorksheetHeader, styleTotalRow, formatPercentage } = await import("../../utils/excelStyling");
       const workbook = new ExcelJS.Workbook();
       
       // Overview Sheet
       const overviewSheet = workbook.addWorksheet('Overview');
-      overviewSheet.addRow(['Metric', 'Value']);
-      overviewSheet.addRow(['Total Visits', data?.totals?.visits ?? 0]);
-      overviewSheet.addRow(['Inquiries This Month', data?.totals?.inquiries ?? 0]);
+      let startRow = addWorksheetHeader(overviewSheet, 'Monthly Visits Report', `Month: ${month}`);
       
-      // Style header row
-      overviewSheet.getRow(1).font = { bold: true };
+      const overviewHeaderRow = overviewSheet.addRow(['Metric', 'Value']);
+      styleHeaderRow(overviewHeaderRow);
+      
+      const overviewData = [
+        ['Total Visits', data?.totals?.visits ?? 0],
+        ['Inquiries This Month', data?.totals?.inquiries ?? 0]
+      ];
+      
+      overviewData.forEach((rowData, index) => {
+        const row = overviewSheet.addRow(rowData);
+        styleDataRow(row, index);
+      });
+      
       overviewSheet.columns = [
         { width: 20 },
         { width: 15 }
@@ -403,19 +414,21 @@ export default function AdminMonthlyReport() {
       // Hourly Analysis Sheet
       if (byHour?.length > 0) {
         const hourlySheet = workbook.addWorksheet('Hourly Analysis');
-        hourlySheet.addRow(['Hour', 'Visits', 'Walk-ins', 'Appointments']);
+        startRow = addWorksheetHeader(hourlySheet, 'Hourly Visit Analysis', `Month: ${month}`);
         
-        byHour.forEach(hour => {
-          hourlySheet.addRow([
+        const hourlyHeaderRow = hourlySheet.addRow(['Hour', 'Visits', 'Walk-ins', 'Appointments']);
+        styleHeaderRow(hourlyHeaderRow);
+        
+        byHour.forEach((hour, index) => {
+          const row = hourlySheet.addRow([
             hour.label,
             hour.count,
             hour.walkin,
             hour.appointment
           ]);
+          styleDataRow(row, index);
         });
         
-        // Style header row
-        hourlySheet.getRow(1).font = { bold: true };
         hourlySheet.columns = [
           { width: 10 },
           { width: 12 },
@@ -427,9 +440,12 @@ export default function AdminMonthlyReport() {
       // Service Analysis Sheet
       if (byService?.length > 0) {
         const serviceSheet = workbook.addWorksheet('Service Analysis');
-        serviceSheet.addRow(['Service', 'Total Visits', 'Walk-ins', 'Appointments', 'Walk-in %', 'Appointment %']);
+        startRow = addWorksheetHeader(serviceSheet, 'Service Analysis', `Month: ${month}`);
         
-        byService.forEach(service => {
+        const serviceHeaderRow = serviceSheet.addRow(['Service', 'Total Visits', 'Walk-ins', 'Appointments', 'Walk-in %', 'Appointment %']);
+        styleHeaderRow(serviceHeaderRow);
+        
+        byService.forEach((service, index) => {
           const totalCount = service.count || 0;
           const walkinCount = service.walkin || 0;
           const appointmentCount = service.appointment || 0;
@@ -437,14 +453,14 @@ export default function AdminMonthlyReport() {
           // Calculate percentages
           const walkinPercentage =
             totalCount > 0
-              ? Number(((walkinCount / totalCount) * 100).toFixed(1))
+              ? Number(((walkinCount / totalCount) * 100).toFixed(1)) / 100
               : null;
           const appointmentPercentage =
             totalCount > 0
-              ? Number(((appointmentCount / totalCount) * 100).toFixed(1))
+              ? Number(((appointmentCount / totalCount) * 100).toFixed(1)) / 100
               : null;
           
-          serviceSheet.addRow([
+          const row = serviceSheet.addRow([
             service.label,
             totalCount,
             walkinCount,
@@ -452,10 +468,13 @@ export default function AdminMonthlyReport() {
             walkinPercentage,
             appointmentPercentage
           ]);
+          styleDataRow(row, index);
+          
+          // Format percentage columns
+          if (walkinPercentage !== null) formatPercentage(row.getCell(5));
+          if (appointmentPercentage !== null) formatPercentage(row.getCell(6));
         });
         
-        // Style header row
-        serviceSheet.getRow(1).font = { bold: true };
         serviceSheet.columns = [
           { width: 25 },
           { width: 15 },
@@ -469,10 +488,13 @@ export default function AdminMonthlyReport() {
       // Detailed Visit Data Sheet (if available)
       if (data?.visits?.length > 0) {
         const visitSheet = workbook.addWorksheet('Visit Details');
-        visitSheet.addRow(['Date', 'Time', 'Service', 'Type', 'Patient ID', 'Status']);
+        startRow = addWorksheetHeader(visitSheet, 'Detailed Visit Data', `Month: ${month}`);
         
-        data.visits.forEach(visit => {
-          visitSheet.addRow([
+        const visitHeaderRow = visitSheet.addRow(['Date', 'Time', 'Service', 'Type', 'Patient ID', 'Status']);
+        styleHeaderRow(visitHeaderRow);
+        
+        data.visits.forEach((visit, index) => {
+          const row = visitSheet.addRow([
             visit.date,
             visit.time,
             visit.service,
@@ -480,10 +502,9 @@ export default function AdminMonthlyReport() {
             visit.patient_id,
             visit.status
           ]);
+          styleDataRow(row, index);
         });
         
-        // Style header row
-        visitSheet.getRow(1).font = { bold: true };
         visitSheet.columns = [
           { width: 12 },
           { width: 10 },
@@ -505,7 +526,7 @@ export default function AdminMonthlyReport() {
       window.URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      alert("Failed to generate Excel file.");
+      toast.error("Failed to generate Excel file.");
     }
   };
 

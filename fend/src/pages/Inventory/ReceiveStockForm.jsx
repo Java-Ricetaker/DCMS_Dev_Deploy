@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
+import toast from "react-hot-toast";
 
 function toDateTimeLocal(d = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -91,9 +92,9 @@ export default function ReceiveStockForm({
         notes: "",
       }));
       onReceived?.();
-      alert("Stock received.");
+      toast.success("Stock received.");
     } catch (err) {
-      alert(err?.response?.data?.message || "Receive failed");
+      toast.error(err?.response?.data?.message || "Receive failed");
     } finally {
       setSaving(false);
     }
@@ -480,7 +481,7 @@ export default function ReceiveStockForm({
                         notes: "",
                       });
                     } catch (err) {
-                      alert(
+                      toast.error(
                         err?.response?.data?.message || "Failed to add supplier"
                       );
                     } finally {

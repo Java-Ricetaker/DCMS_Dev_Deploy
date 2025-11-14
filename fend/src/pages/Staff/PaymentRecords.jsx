@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/api';
 import ReceiptModal from '../../components/Admin/ReceiptModal';
+import toast from 'react-hot-toast';
 
 const PaymentRecords = () => {
   const [payments, setPayments] = useState([]);
@@ -134,7 +135,7 @@ const PaymentRecords = () => {
       setShowReceiptModal(true);
     } catch (err) {
       console.error('Failed to fetch receipt data:', err);
-      alert('Failed to load receipt. Please try again.');
+      toast.error('Failed to load receipt. Please try again.');
     } finally {
       setLoadingReceipt(false);
     }

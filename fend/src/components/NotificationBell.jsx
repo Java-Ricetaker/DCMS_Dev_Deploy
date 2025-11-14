@@ -132,7 +132,7 @@ export default function NotificationBell() {
       <style>
         {`
           .notification-bell-btn:hover {
-            background: linear-gradient(135deg, #0096c7 0%, #0056b3 100%) !important;
+            background: rgba(255, 255, 255, 0.2) !important;
             transform: translateY(-1px) !important;
           }
         `}
@@ -144,16 +144,17 @@ export default function NotificationBell() {
         title="Notifications"
         aria-label="Notifications"
         style={{
-          background: 'linear-gradient(135deg, #00b4d8 0%, #0077b6 100%)',
+          background: 'rgba(255, 255, 255, 0.15)',
           border: 'none',
           color: 'white',
           borderRadius: '8px',
           padding: '0.5rem 0.75rem',
-          transition: 'all 0.3s ease'
+          transition: 'all 0.2s ease'
         }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         </svg>
         {unread > 0 && (
           <span className="badge ms-2" style={{

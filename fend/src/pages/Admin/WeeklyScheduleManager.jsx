@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../../api/api";
+import toast, { Toaster } from "react-hot-toast";
 
 const weekdayLabels = [
   "Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"
@@ -51,25 +52,88 @@ function WeeklyScheduleManager() {
         note: row.note ?? null,
         // intentionally NOT sending dentist_count / max_per_slot anymore
       });
-      alert(`✅ ${weekdayLabels[row.weekday]} saved.`);
+      toast.success(`${weekdayLabels[row.weekday]} saved.`, {
+        style: {
+          background: '#28a745',
+          color: '#fff',
+          borderRadius: '8px',
+          padding: '16px',
+          fontSize: '16px',
+          fontWeight: '500',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        },
+        iconTheme: {
+          primary: '#fff',
+          secondary: '#28a745',
+        },
+      });
     } catch (err) {
       console.error("Failed to save", err);
-      alert("❌ Save failed. See console.");
+      const errorMessage = err.response?.data?.message || "Save failed. See console.";
+      toast.error(errorMessage, {
+        style: {
+          background: '#dc3545',
+          color: '#fff',
+          borderRadius: '8px',
+          padding: '16px',
+          fontSize: '16px',
+          fontWeight: '500',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        },
+        iconTheme: {
+          primary: '#fff',
+          secondary: '#dc3545',
+        },
+      });
     } finally {
       setSavingId(null);
     }
   };
 
   return (
-    <div 
-      className="weekly-schedule-page"
-      style={{
-        width: '100%',
-        maxWidth: '100%',
-        padding: '0',
-        boxSizing: 'border-box'
-      }}
-    >
+    <>
+      <Toaster 
+        position="top-center"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            borderRadius: '8px',
+            padding: '16px',
+            fontSize: '16px',
+            fontWeight: '500',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          },
+          error: {
+            style: {
+              background: '#dc3545',
+              color: '#fff',
+            },
+            iconTheme: {
+              primary: '#fff',
+              secondary: '#dc3545',
+            },
+          },
+          success: {
+            style: {
+              background: '#28a745',
+              color: '#fff',
+            },
+            iconTheme: {
+              primary: '#fff',
+              secondary: '#28a745',
+            },
+          },
+        }}
+      />
+      <div 
+        className="weekly-schedule-page"
+        style={{
+          width: '100%',
+          maxWidth: '100%',
+          padding: '0',
+          boxSizing: 'border-box'
+        }}
+      >
       {/* Header Section */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
@@ -250,6 +314,7 @@ function WeeklyScheduleManager() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

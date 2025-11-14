@@ -21,6 +21,14 @@ class Service extends Model
         'estimated_minutes',
         'per_teeth_service',
         'per_tooth_minutes',
+        'is_follow_up',
+        'follow_up_parent_service_id',
+        'follow_up_max_gap_weeks',
+    ];
+
+    protected $casts = [
+        'is_follow_up' => 'boolean',
+        'follow_up_max_gap_weeks' => 'integer',
     ];
 
     public function discounts()
@@ -69,6 +77,16 @@ class Service extends Model
     public function parentPackages()
     {
         return $this->belongsToMany(Service::class, 'service_bundle_items', 'child_service_id', 'parent_service_id');
+    }
+
+    public function followUpParent()
+    {
+        return $this->belongsTo(Service::class, 'follow_up_parent_service_id');
+    }
+
+    public function followUpChildren()
+    {
+        return $this->hasMany(Service::class, 'follow_up_parent_service_id');
     }
 
     // Helper method to check if this service can be marked as per-teeth
