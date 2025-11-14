@@ -25,6 +25,7 @@ return [
         'https://it-42-capstone.vercel.app',
         'https://4ce950038a1a.ngrok-free.app',
         'https://positively-excaudate-dian.ngrok-free.dev',
+        'https://dcms-k70dh.sevalla.app/',
     ],
 
     'allowed_origins_patterns' => [],
