@@ -211,11 +211,11 @@ export default function AdminAnalyticsDashboard() {
       
       const kpiData = [
         ["Metric", "Current", "Previous", "Change", "Trend"],
-        ["Total Visits", String(k?.total_visits?.value ?? 0), String(k?.total_visits?.prev ?? 0), `${k?.total_visits?.pct_change ?? 0}%`, (k?.total_visits?.pct_change ?? 0) >= 0 ? "↗ Positive" : "↘ Negative"],
-        ["Approved Appts", String(k?.approved_appointments?.value ?? 0), String(k?.approved_appointments?.prev ?? 0), `${k?.approved_appointments?.pct_change ?? 0}%`, (k?.approved_appointments?.pct_change ?? 0) >= 0 ? "↗ Positive" : "↘ Negative"],
-        ["No-shows", String(k?.no_shows?.value ?? 0), String(k?.no_shows?.prev ?? 0), `${k?.no_shows?.pct_change ?? 0}%`, (k?.no_shows?.pct_change ?? 0) >= 0 ? "↗ Concern" : "↘ Better"],
-        ["Avg Duration (min)", String(k?.avg_visit_duration_min?.value ?? 0), String(k?.avg_visit_duration_min?.prev ?? 0), `${k?.avg_visit_duration_min?.pct_change ?? 0}%`, (k?.avg_visit_duration_min?.pct_change ?? 0) >= 0 ? "↗ Longer" : "↘ Shorter"],
-        ["Revenue", `₱${(k?.total_revenue?.value ?? 0).toLocaleString()}`, `₱${(k?.total_revenue?.prev ?? 0).toLocaleString()}`, `${k?.total_revenue?.pct_change ?? 0}%`, (k?.total_revenue?.pct_change ?? 0) >= 0 ? "↗ Growth" : "↘ Decline"]
+        ["Total Visits", String(k?.total_visits?.value ?? 0), String(k?.total_visits?.prev ?? 0), `${k?.total_visits?.pct_change ?? 0}%`, (k?.total_visits?.pct_change ?? 0) >= 0 ? "+ Positive" : "- Negative"],
+        ["Approved Appts", String(k?.approved_appointments?.value ?? 0), String(k?.approved_appointments?.prev ?? 0), `${k?.approved_appointments?.pct_change ?? 0}%`, (k?.approved_appointments?.pct_change ?? 0) >= 0 ? "+ Positive" : "- Negative"],
+        ["No-shows", String(k?.no_shows?.value ?? 0), String(k?.no_shows?.prev ?? 0), `${k?.no_shows?.pct_change ?? 0}%`, (k?.no_shows?.pct_change ?? 0) >= 0 ? "+ Concern" : "- Better"],
+        ["Avg Duration (min)", String(k?.avg_visit_duration_min?.value ?? 0), String(k?.avg_visit_duration_min?.prev ?? 0), `${k?.avg_visit_duration_min?.pct_change ?? 0}%`, (k?.avg_visit_duration_min?.pct_change ?? 0) >= 0 ? "+ Longer" : "- Shorter"],
+        ["Revenue", `PHP ${(k?.total_revenue?.value ?? 0).toLocaleString()}`, `PHP ${(k?.total_revenue?.prev ?? 0).toLocaleString()}`, `${k?.total_revenue?.pct_change ?? 0}%`, (k?.total_revenue?.pct_change ?? 0) >= 0 ? "+ Growth" : "- Decline"]
       ];
 
       autoTable(doc, {
@@ -268,8 +268,8 @@ export default function AdminAnalyticsDashboard() {
           ["Service", "Current Revenue", "Previous Revenue", "Change (%)"],
           ...data.top_revenue_services.map(service => [
             service.service_name,
-            `₱${service.revenue.toLocaleString()}`,
-            `₱${(service.prev_revenue || 0).toLocaleString()}`,
+            `PHP ${service.revenue.toLocaleString()}`,
+            `PHP ${(service.prev_revenue || 0).toLocaleString()}`,
             `${service.pct_change || 0}%`
           ])
         ];
@@ -311,8 +311,8 @@ export default function AdminAnalyticsDashboard() {
             label,
             String(trendData.visits?.[index] ?? 0),
             String(trendData.appointments?.[index] ?? 0),
-            `₱${(trendData.revenue?.[index] ?? 0).toLocaleString()}`,
-            `₱${(trendData.loss?.[index] ?? 0).toLocaleString()}`
+            `PHP ${(trendData.revenue?.[index] ?? 0).toLocaleString()}`,
+            `PHP ${(trendData.loss?.[index] ?? 0).toLocaleString()}`
           ])
         ];
 
