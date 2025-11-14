@@ -1,8 +1,12 @@
 [phases.setup]
-nixPkgs = ["php82", "composer"]
+nixPkgs = ["php82", "curl"]
 
 [phases.install]
-cmds = ["cd bend && composer install --no-dev --optimize-autoloader"]
+cmds = [
+  "curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",
+  "chmod +x /usr/local/bin/composer",
+  "cd bend && composer install --no-dev --optimize-autoloader"
+]
 
 [start]
 cmd = "chmod +x start.sh && ./start.sh"
