@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["php82", "curl", "nodejs-20_x"]
+nixPkgs = ["php82", "curl", "nodejs"]
 
 [phases.install]
 cmds = [
