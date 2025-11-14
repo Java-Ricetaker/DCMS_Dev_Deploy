@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["php82", "composer"]
+
+[phases.install]
+cmds = ["cd bend && composer install --no-dev --optimize-autoloader"]
+
+[start]
+cmd = "chmod +x start.sh && ./start.sh"
+
