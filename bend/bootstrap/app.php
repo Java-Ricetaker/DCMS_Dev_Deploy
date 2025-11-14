@@ -42,9 +42,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // Better error reporting for debugging
-        if (config('app.debug')) {
-            $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+        // Ensure we always return a valid HTTP response, even on errors
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            // For health check endpoint, always return 200 even on errors
+            if ($request->is('up') || $request->is('health')) {
+                return response()->json(['status' => 'error', 'message' => $e->getMessage()], 200);
+            }
+            
+            // Better error reporting for debugging
+            if (config('app.debug')) {
                 if ($request->expectsJson()) {
                     return response()->json([
                         'message' => $e->getMessage(),
@@ -53,6 +59,6 @@ return Application::configure(basePath: dirname(__DIR__))
                         'trace' => $e->getTraceAsString(),
                     ], 500);
                 }
-            });
-        }
+            }
+        });
     })->create();

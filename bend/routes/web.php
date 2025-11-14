@@ -9,13 +9,20 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 
 // Serve the built SPA at root
 Route::get('/', function () {
-    $indexPath = public_path('index.html');
-    if (!File::exists($indexPath)) {
-        abort(500, 'Frontend not built. Please run: npm run build in the fend directory and commit the built files.');
+    try {
+        $indexPath = public_path('index.html');
+        if (!File::exists($indexPath)) {
+            return response('Frontend not built. Please run: npm run build in the fend directory and commit the built files.', 500)
+                ->header('Content-Type', 'text/plain');
+        }
+        return response()->file($indexPath, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Error serving index.html: ' . $e->getMessage());
+        return response('Error loading application', 500)
+            ->header('Content-Type', 'text/plain');
     }
-    return response()->file($indexPath, [
-        'Content-Type' => 'text/html; charset=utf-8',
-    ]);
 });
 
 Route::post('/login', [AuthenticatedSessionController::class, 'store']);
@@ -27,11 +34,20 @@ Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $requ
 
 // Serve the built SPA for any path that is NOT /api, /sanctum, /storage, /assets, or /verify-email
 Route::get('/{any}', function () {
-    $indexPath = public_path('index.html');
-    if (!File::exists($indexPath)) {
-        abort(500, 'Frontend not built. Please run: npm run build in the fend directory and commit the built files.');
+    try {
+        $indexPath = public_path('index.html');
+        if (!File::exists($indexPath)) {
+            return response('Frontend not built. Please run: npm run build in the fend directory and commit the built files.', 500)
+                ->header('Content-Type', 'text/plain');
+        }
+        return response()->file($indexPath, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Error serving index.html: ' . $e->getMessage());
+        return response('Error loading application', 500)
+            ->header('Content-Type', 'text/plain');
     }
-    return File::get($indexPath);
-})->where('any', '^(?!api)(?!sanctum)(?!storage)(?!assets)(?!verify-email).*$');
+})->where('any', '^(?!api)(?!sanctum)(?!storage)(?!assets)(?!verify-email)(?!up).*$');
 
 require __DIR__.'/auth.php';
