@@ -29,11 +29,29 @@ mkdir -p storage/logs
 mkdir -p bootstrap/cache
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
+# Test database connection before caching (if DB is configured)
+if [ ! -z "$DB_CONNECTION" ] && [ "$DB_CONNECTION" != "" ]; then
+  echo "Testing database connection..."
+  php artisan db:show 2>&1 || echo "Database connection test failed (this is OK if migrations haven't been run yet)"
+fi
+
+# Clear old caches first to avoid stale config
+echo "Clearing old caches..."
+php artisan config:clear 2>&1 || true
+php artisan route:clear 2>&1 || true
+php artisan view:clear 2>&1 || true
+
 # Cache configuration
 echo "Caching Laravel configuration..."
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+php artisan config:cache 2>&1 || echo "Config cache failed"
+php artisan route:cache 2>&1 || echo "Route cache failed"
+php artisan view:cache 2>&1 || echo "View cache failed"
+
+# Show recent errors if log file exists
+if [ -f "storage/logs/laravel.log" ]; then
+  echo "Recent Laravel errors (last 20 lines):"
+  tail -n 20 storage/logs/laravel.log 2>/dev/null || echo "Could not read log file"
+fi
 
 # Start queue listener in background
 echo "Starting queue listener..."

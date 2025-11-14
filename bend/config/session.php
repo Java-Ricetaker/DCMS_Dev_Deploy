@@ -199,7 +199,10 @@ return [
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', 'lax'),
+    'same_site' => (function() {
+        $value = trim(strtolower(env('SESSION_SAME_SITE', 'lax')));
+        return in_array($value, ['lax', 'strict', 'none']) ? $value : 'lax';
+    })(),
 
     /*
     |--------------------------------------------------------------------------
