@@ -17,11 +17,14 @@ use Illuminate\Support\Str;
 
 class RealisticVisitFactory
 {
-    private \Faker\Generator $faker;
+    private ?\Faker\Generator $faker = null;
 
     public function __construct(private readonly User $adminUser)
     {
-        $this->faker = \Faker\Factory::create();
+        // Only use Faker if it's available (dev dependency)
+        if (class_exists(\Faker\Factory::class)) {
+            $this->faker = \Faker\Factory::create();
+        }
     }
 
     /**
@@ -190,13 +193,13 @@ class RealisticVisitFactory
             'sex' => $patient->sex,
             'address' => $patient->address,
             'contact_number' => $patient->contact_number,
-            'occupation' => $this->faker->jobTitle(),
+            'occupation' => $this->getJobTitle(),
             'date_of_birth' => $birthdate,
             'email' => $patient->user?->email,
-            'previous_dentist' => $this->faker->name(),
+            'previous_dentist' => $this->getName(),
             'last_dental_visit' => Carbon::now()->subMonths(rand(3, 12)),
-            'physician_name' => $this->faker->name(),
-            'physician_address' => $this->faker->address(),
+            'physician_name' => $this->getName(),
+            'physician_address' => $this->getAddress(),
             'in_good_health' => true,
             'under_medical_treatment' => false,
             'medical_treatment_details' => null,
@@ -217,9 +220,9 @@ class RealisticVisitFactory
             'is_pregnant' => false,
             'is_nursing' => false,
             'taking_birth_control' => false,
-            'blood_type' => $this->faker->randomElement(['A+', 'B+', 'O+', 'AB+', 'A-', 'O-']),
-            'blood_pressure' => $this->faker->randomElement(['110/70', '120/80', '125/85']),
-            'bleeding_time' => $this->faker->randomElement(['Normal', 'Slightly prolonged']),
+            'blood_type' => $this->randomElement(['A+', 'B+', 'O+', 'AB+', 'A-', 'O-']),
+            'blood_pressure' => $this->randomElement(['110/70', '120/80', '125/85']),
+            'bleeding_time' => $this->randomElement(['Normal', 'Slightly prolonged']),
             'high_blood_pressure' => rand(0, 1) === 1,
             'low_blood_pressure' => false,
             'heart_disease' => false,
@@ -468,6 +471,46 @@ class RealisticVisitFactory
         ];
 
         return $notes[array_rand($notes)];
+    }
+
+    /**
+     * Helper methods to provide fallback values when Faker is not available
+     */
+    private function getJobTitle(): string
+    {
+        if ($this->faker) {
+            return $this->faker->jobTitle();
+        }
+        $jobs = ['Engineer', 'Teacher', 'Nurse', 'Doctor', 'Accountant', 'Manager', 'Designer', 'Developer'];
+        return $jobs[array_rand($jobs)];
+    }
+
+    private function getName(): string
+    {
+        if ($this->faker) {
+            return $this->faker->name();
+        }
+        $firstNames = ['John', 'Jane', 'Michael', 'Sarah', 'David', 'Emily', 'Robert', 'Maria'];
+        $lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis'];
+        return $firstNames[array_rand($firstNames)] . ' ' . $lastNames[array_rand($lastNames)];
+    }
+
+    private function getAddress(): string
+    {
+        if ($this->faker) {
+            return $this->faker->address();
+        }
+        $streets = ['Main St', 'Oak Ave', 'Park Blvd', 'Cedar Ln', 'Maple Dr'];
+        $cities = ['Manila', 'Quezon City', 'Makati', 'Pasig', 'Taguig'];
+        return rand(100, 9999) . ' ' . $streets[array_rand($streets)] . ', ' . $cities[array_rand($cities)];
+    }
+
+    private function randomElement(array $array): string
+    {
+        if ($this->faker) {
+            return $this->faker->randomElement($array);
+        }
+        return $array[array_rand($array)];
     }
 }
 
