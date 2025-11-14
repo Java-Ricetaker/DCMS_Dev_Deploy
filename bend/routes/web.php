@@ -13,7 +13,9 @@ Route::get('/', function () {
     if (!File::exists($indexPath)) {
         abort(500, 'Frontend not built. Please run: npm run build in the fend directory and commit the built files.');
     }
-    return File::get($indexPath);
+    return response()->file($indexPath, [
+        'Content-Type' => 'text/html; charset=utf-8',
+    ]);
 });
 
 Route::post('/login', [AuthenticatedSessionController::class, 'store']);
