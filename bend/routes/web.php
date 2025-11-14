@@ -9,7 +9,11 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 
 // Serve the built SPA at root
 Route::get('/', function () {
-    return File::get(public_path('index.html'));
+    $indexPath = public_path('index.html');
+    if (!File::exists($indexPath)) {
+        abort(500, 'Frontend not built. Please run: npm run build in the fend directory and commit the built files.');
+    }
+    return File::get($indexPath);
 });
 
 Route::post('/login', [AuthenticatedSessionController::class, 'store']);
@@ -21,7 +25,11 @@ Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $requ
 
 // Serve the built SPA for any path that is NOT /api, /sanctum, /storage, /assets, or /verify-email
 Route::get('/{any}', function () {
-    return File::get(public_path('index.html'));
+    $indexPath = public_path('index.html');
+    if (!File::exists($indexPath)) {
+        abort(500, 'Frontend not built. Please run: npm run build in the fend directory and commit the built files.');
+    }
+    return File::get($indexPath);
 })->where('any', '^(?!api)(?!sanctum)(?!storage)(?!assets)(?!verify-email).*$');
 
 require __DIR__.'/auth.php';
