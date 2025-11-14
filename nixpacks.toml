@@ -5,7 +5,7 @@ nixPkgs = ["php82", "curl"]
 cmds = [
   "curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",
   "chmod +x /usr/local/bin/composer",
-  "cd bend && composer install --no-dev --optimize-autoloader"
+  "cd bend && /usr/local/bin/composer install --no-dev --optimize-autoloader"
 ]
 
 [start]
