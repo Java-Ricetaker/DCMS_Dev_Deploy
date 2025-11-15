@@ -47,9 +47,14 @@ return [
         'secret' => env('MAYA_SECRET_KEY'),
     ],
 
-    'sns' => [
-        'region'    => env('AWS_DEFAULT_REGION', 'ap-southeast-1'),
-        'sender_id' => env('AWS_SNS_SENDER_ID'),
-        'sms_type'  => env('AWS_SNS_SMS_TYPE', 'Transactional'),
+    'clicksend' => [
+        'username' => env('CLICKSEND_USERNAME'),
+        'api_key' => env('CLICKSEND_API_KEY'),
+        'sender_id' => env('CLICKSEND_SENDER_ID', ''),
+    ],
+
+    'sms' => [
+        'enabled' => env('SMS_ENABLED', false),
+        'whitelist' => env('SMS_WHITELIST', ''),
     ],
 ];
