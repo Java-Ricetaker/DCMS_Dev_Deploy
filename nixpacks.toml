@@ -3,10 +3,16 @@ nixPkgs = ["php82", "curl", "nodejs"]
 
 [phases.install]
 cmds = [
+  "echo 'Installing Composer...'",
   "curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",
   "chmod +x /usr/local/bin/composer",
-  "cd bend && /usr/local/bin/composer install --no-dev --optimize-autoloader",
-  "cd fend && npm install && npm run build"
+  "echo 'Installing PHP dependencies...'",
+  "cd bend && /usr/local/bin/composer install --no-dev --optimize-autoloader || (echo 'Composer install failed!' && exit 1)",
+  "echo 'Installing Node dependencies...'",
+  "cd fend && npm install || (echo 'npm install failed!' && exit 1)",
+  "echo 'Building frontend...'",
+  "cd fend && npm run build || (echo 'npm build failed!' && exit 1)",
+  "echo 'Build completed successfully!'"
 ]
 
 [start]

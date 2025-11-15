@@ -15,6 +15,12 @@ if [ ! -d "$BEND_DIR" ]; then
   exit 1
 fi
 
+# Set default PORT if not provided
+if [ -z "$PORT" ]; then
+  PORT=8000
+  echo "Warning: PORT environment variable not set, defaulting to $PORT"
+fi
+
 # Check and generate APP_KEY if missing
 cd "$BEND_DIR"
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then
@@ -78,5 +84,5 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
-echo "Starting Laravel server..."
-cd "$BEND_DIR" && php artisan serve --host=0.0.0.0 --port=$PORT
+echo "Starting Laravel server on port $PORT..."
+cd "$BEND_DIR" && php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
