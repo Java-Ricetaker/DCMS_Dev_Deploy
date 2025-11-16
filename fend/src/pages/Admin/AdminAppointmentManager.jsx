@@ -4,6 +4,7 @@ import { useState, Suspense, lazy } from "react";
 const StaffAppointmentManager = lazy(() => import("../Staff/StaffAppointmentManager"));
 const AppointmentFinder = lazy(() => import("../Staff/AppointmentFinder"));
 const VisitTrackerManager = lazy(() => import("../../components/Staff/VisitTrackerManager"));
+const AppointmentReminders = lazy(() => import("../Staff/AppointmentReminders"));
 
 function AdminAppointmentManager() {
   const [activeTab, setActiveTab] = useState("appointments");
@@ -80,6 +81,7 @@ function AdminAppointmentManager() {
                 <TabButton id="appointments" icon="📅" label="Appointment Approval" />
                 <TabButton id="appointment-finder" icon="🔍" label="Appointment Finder" />
                 <TabButton id="visits" icon="👥" label="Visit Tracking" />
+                <TabButton id="sms-reminders" icon="🔔" label="SMS Reminders" />
               </div>
 
               <div className="tab-content" style={{ width: '100%', maxWidth: '100%' }}>
@@ -122,6 +124,20 @@ function AdminAppointmentManager() {
                       </div>
                     }>
                       <VisitTrackerManager initialVisitType={initialVisitType} initialRefCode={initialRefCode} />
+                    </Suspense>
+                  </div>
+                )}
+                {activeTab === "sms-reminders" && (
+                  <div className="tab-pane fade show active" style={{ width: '100%', maxWidth: '100%' }}>
+                    <Suspense fallback={
+                      <div className="text-center py-5">
+                        <div className="spinner-border text-primary" role="status">
+                          <span className="visually-hidden">Loading...</span>
+                        </div>
+                        <p className="mt-3 text-muted">Loading SMS Reminders...</p>
+                      </div>
+                    }>
+                      <AppointmentReminders />
                     </Suspense>
                   </div>
                 )}
