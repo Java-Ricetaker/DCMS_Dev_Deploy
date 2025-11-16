@@ -34,6 +34,13 @@ class MayaController extends Controller
             }
         }
 
+        // Require either appointment_id or patient_visit_id
+        if (!$request->appointment_id && !$request->patient_visit_id) {
+            return response()->json([
+                'message' => 'Either appointment_id or patient_visit_id is required to compute payment amount.',
+            ], 422);
+        }
+
         $amountDue = $this->computeAmount($request);
 
         $payment = Payment::create([
@@ -452,7 +459,54 @@ class MayaController extends Controller
 
     private function computeAmount(Request $request): float
     {
-        // TODO: compute from appointment/visit/promos
-        return 1500.00;
+        try {
+            // Appointment-based amount: use service price, including per-tooth logic
+            if ($request->appointment_id) {
+                $appointment = \App\Models\Appointment::with('service')->findOrFail($request->appointment_id);
+                $computed = (float) $appointment->calculateTotalCost();
+                $normalized = (float) number_format($computed, 2, '.', '');
+                Log::info('maya.compute.amount.appointment', [
+                    'appointment_id' => $appointment->id,
+                    'service_id' => $appointment->service?->id,
+                    'service_price' => $appointment->service?->price,
+                    'teeth_count' => $appointment->teeth_count,
+                    'computed' => $computed,
+                    'normalized' => $normalized,
+                ]);
+                return $normalized;
+            }
+
+            // Visit-based amount: remaining balance (service (priced at visit_date) + additional charges - already paid)
+            if ($request->patient_visit_id) {
+                $visit = \App\Models\PatientVisit::with(['service', 'additionalCharges', 'payments'])->findOrFail($request->patient_visit_id);
+                $visitDate = $visit->visit_date ? $visit->visit_date->toDateString() : now()->toDateString();
+                $unitPrice = $visit->service ? (float) $visit->service->getPriceForDate($visitDate) : 0.0;
+                $serviceAmount = $unitPrice;
+                $additional = (float) $visit->additionalCharges->sum('total_price');
+                $paid = (float) $visit->payments->sum('amount_paid');
+                $due = max(0, $serviceAmount + $additional - $paid);
+                $normalized = (float) number_format($due, 2, '.', '');
+                Log::info('maya.compute.amount.visit', [
+                    'visit_id' => $visit->id,
+                    'service_id' => $visit->service?->id,
+                    'service_price_at_date' => $unitPrice,
+                    'visit_date' => $visitDate,
+                    'additional_total' => $additional,
+                    'total_paid' => $paid,
+                    'computed_due' => $due,
+                    'normalized' => $normalized,
+                ]);
+                return $normalized;
+            }
+
+            // Should not be reached due to earlier validation guard
+            Log::warning('maya.compute.amount.no_target');
+            return 0.00;
+        } catch (\Throwable $e) {
+            Log::error('maya.compute.amount.error', [
+                'message' => $e->getMessage(),
+            ]);
+            return 0.00;
+        }
     }
 }

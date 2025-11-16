@@ -671,7 +671,9 @@ class PatientVisitController extends Controller
 
             // 5. Handle payment verification/adjustment
             $totalPaid = $visit->payments->sum('amount_paid');
-            $servicePrice = $visit->service?->price ?? 0;
+            // Use date-aware pricing for service price (handles promos/discounts)
+            $visitDate = $visit->visit_date ? $visit->visit_date->toDateString() : now()->toDateString();
+            $servicePrice = $visit->service ? (float) $visit->service->getPriceForDate($visitDate) : 0.0;
             
             // Calculate additional charges total
             $additionalChargesTotal = 0;
@@ -1239,9 +1241,11 @@ class PatientVisitController extends Controller
      */
     public function getDentistNotes(Request $request, $id)
     {
-        $visit = PatientVisit::with(['visitNotes'])->findOrFail($id);
+        $visit = PatientVisit::with(['visitNotes','service'])->findOrFail($id);
         $userId = $request->user()->id;
         $userRole = $request->user()->role;
+        $visitDate = $visit->visit_date ? $visit->visit_date->toDateString() : now()->toDateString();
+        $servicePriceAtDate = $visit->service ? (float) $visit->service->getPriceForDate($visitDate) : 0.0;
         
         if (!$visit->visitNotes) {
             // Log access attempt even if no notes exist
@@ -1267,6 +1271,7 @@ class PatientVisitController extends Controller
                 'findings' => null,
                 'treatment_plan' => null,
                 'teeth_treated' => null,
+                'service_price_at_date' => $servicePriceAtDate,
             ]);
         }
 
@@ -1304,6 +1309,7 @@ class PatientVisitController extends Controller
             'created_at' => $visit->visitNotes->created_at,
             'updated_by' => $visit->visitNotes->updatedBy?->name,
             'updated_at' => $visit->visitNotes->updated_at,
+            'service_price_at_date' => $servicePriceAtDate,
         ]);
     }
 

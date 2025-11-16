@@ -1,5 +1,6 @@
 /* global bootstrap */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../api/api";
 import VisitCompletionModal from "./VisitCompletionModal";
 import VisitNotesModal from "./VisitNotesModal";
@@ -8,7 +9,7 @@ import MedicalHistoryFormModal from "./MedicalHistoryFormModal";
 import TimeBlockModal from "./TimeBlockModal";
 import toast from "react-hot-toast";
 
-function VisitTrackerManager() {
+function VisitTrackerManager({ initialVisitType, initialRefCode }) {
   const [visits, setVisits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -38,6 +39,8 @@ function VisitTrackerManager() {
   const [viewingNotes, setViewingNotes] = useState(null);
     const [sendingReceipt, setSendingReceipt] = useState(null);       
   const [sendingVisitCode, setSendingVisitCode] = useState(null);   
+  const location = useLocation();
+  const refInputEl = useRef(null);
   const [potentialMatches, setPotentialMatches] = useState([]);
   const [showMatchesModal, setShowMatchesModal] = useState(false);  
   const [showMakeAppointmentModal, setShowMakeAppointmentModal] = useState(false);
@@ -137,6 +140,26 @@ function VisitTrackerManager() {
       rejected: visits.filter(v => v.status === 'rejected').length
     });
   }, [visits]);
+
+  // Initialize from props or query params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const paramType = params.get("visitType");
+    const paramCode = params.get("refCode");
+    const incomingType = initialVisitType || paramType;
+    const incomingCode = (initialRefCode || paramCode || "").toUpperCase();
+
+    if (incomingType === "appointment") {
+      setVisitType("appointment");
+      if (incomingCode) {
+        setRefCode(incomingCode);
+        // slight delay to allow input render before focusing
+        setTimeout(() => {
+          if (refInputEl.current) refInputEl.current.focus();
+        }, 0);
+      }
+    }
+  }, [initialVisitType, initialRefCode, location.search]);
 
   const fetchVisits = async () => {
     setLoading(true);
@@ -679,6 +702,7 @@ function VisitTrackerManager() {
                 className="form-control"
                 placeholder="Enter Appointment Reference Code"
                 value={refCode}
+                ref={refInputEl}
                 onChange={(e) => setRefCode(e.target.value.toUpperCase())}
               />
               <button

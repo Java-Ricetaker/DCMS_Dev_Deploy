@@ -7,6 +7,14 @@ const VisitTrackerManager = lazy(() => import("../../components/Staff/VisitTrack
 
 function AdminAppointmentManager() {
   const [activeTab, setActiveTab] = useState("appointments");
+  const [initialVisitType, setInitialVisitType] = useState(null);
+  const [initialRefCode, setInitialRefCode] = useState("");
+
+  const handleSelectRefFromFinder = (code) => {
+    setInitialVisitType("appointment");
+    setInitialRefCode(code || "");
+    setActiveTab("visits");
+  };
 
   const TabButton = ({ id, icon, label }) => (
     <button
@@ -99,7 +107,7 @@ function AdminAppointmentManager() {
                         <p className="mt-3 text-muted">Loading Appointment Finder...</p>
                       </div>
                     }>
-                      <AppointmentFinder />
+                      <AppointmentFinder onSelectReferenceCode={handleSelectRefFromFinder} />
                     </Suspense>
                   </div>
                 )}
@@ -113,7 +121,7 @@ function AdminAppointmentManager() {
                         <p className="mt-3 text-muted">Loading Visit Tracker...</p>
                       </div>
                     }>
-                      <VisitTrackerManager />
+                      <VisitTrackerManager initialVisitType={initialVisitType} initialRefCode={initialRefCode} />
                     </Suspense>
                   </div>
                 )}

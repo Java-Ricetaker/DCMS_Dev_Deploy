@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../api/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
-export default function AppointmentFinder() {
+export default function AppointmentFinder({ onSelectReferenceCode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [appointments, setAppointments] = useState([]);
@@ -11,6 +12,7 @@ export default function AppointmentFinder() {
   const [showResults, setShowResults] = useState(false);
   const [error, setError] = useState("");
   const searchTimeoutRef = useRef(null);
+  const navigate = useNavigate();
 
   // Debounced search function
   useEffect(() => {
@@ -374,12 +376,29 @@ export default function AppointmentFinder() {
                               </div>
                               
                               <div className="col-md-4 text-md-end">
-                                <div className="bg-primary text-white rounded-3 p-3 text-center">
+                                <button
+                                  type="button"
+                                  className="w-100 btn btn-primary rounded-3 p-3 text-center"
+                                  onClick={() => {
+                                    const code = appointment.reference_code;
+                                    if (!code) return;
+                                    if (onSelectReferenceCode) {
+                                      onSelectReferenceCode(code);
+                                    } else {
+                                      navigate(
+                                        `/staff/visit-tracker?visitType=appointment&refCode=${encodeURIComponent(
+                                          code
+                                        )}`
+                                      );
+                                    }
+                                  }}
+                                  title="Use this reference code in Visit Tracker"
+                                >
                                   <div className="small mb-1">Reference Code</div>
                                   <div className="h5 fw-bold mb-0 font-monospace">
                                     {appointment.reference_code || 'N/A'}
                                   </div>
-                                </div>
+                                </button>
                                 
                                 {appointment.teeth_count && (
                                   <div className="mt-2">

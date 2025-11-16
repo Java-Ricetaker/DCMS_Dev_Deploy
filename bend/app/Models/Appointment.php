@@ -81,12 +81,16 @@ class Appointment extends Model
             return 0;
         }
 
+        // Use price effective on the appointment date (handles promos/discounts)
+        $date = $this->date ?: now()->toDateString();
+        $unitPrice = (float) $this->service->getPriceForDate($date);
+
         if (!$this->service->per_teeth_service) {
-            return $this->service->price;
+            return $unitPrice;
         }
 
-        $teethCount = $this->teeth_count ?? 0;
-        return $this->service->price * $teethCount;
+        $teethCount = (int) ($this->teeth_count ?? 0);
+        return $unitPrice * max(0, $teethCount);
     }
 
     // Helper method to calculate estimated time for this appointment

@@ -113,14 +113,30 @@ export default function CapacityPlanner() {
     }
   };
 
+  const hasOverCapOpenDay = useMemo(
+    () =>
+      rows.some(
+        (r) =>
+          !r.is_closed &&
+          r.max_parallel !== "" &&
+          Number(r.max_parallel) > Number(r.active_dentists)
+      ),
+    [rows]
+  );
+
   return (
     <div className="p-2">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h3 className="m-0">📊 Capacity (next 14 days)</h3>
         <button
           className="btn btn-dark"
-          disabled={saving || loading}
+          disabled={saving || loading || hasOverCapOpenDay}
           onClick={saveAll}
+          title={
+            hasOverCapOpenDay
+              ? "Fix rows where max same‑time appts exceeds active dentists."
+              : undefined
+          }
         >
           {saving ? "Saving…" : "Save All"}
         </button>

@@ -26,6 +26,7 @@ export default function VisitCompletionModal({ visit, onClose, onComplete }) {
   const [paymentStatus, setPaymentStatus] = useState("paid");
   const [onsitePaymentAmount, setOnsitePaymentAmount] = useState("");
   const [paymentMethodChange, setPaymentMethodChange] = useState("");
+  const [servicePriceAtDate, setServicePriceAtDate] = useState(null);
 
   useEffect(() => {
     fetchInventoryItems();
@@ -51,6 +52,11 @@ export default function VisitCompletionModal({ visit, onClose, onComplete }) {
       if (notes.findings) setFindings(notes.findings);
       if (notes.treatment_plan) setTreatmentPlan(notes.treatment_plan);
       if (notes.teeth_treated) setTeethTreated(notes.teeth_treated);
+
+      // Prefer date-aware service price when provided by backend
+      if (typeof res.data?.service_price_at_date === "number") {
+        setServicePriceAtDate(Number(res.data.service_price_at_date));
+      }
       
       // Store original notes info for display
       if (notes.created_by || notes.created_at) {
@@ -173,7 +179,8 @@ export default function VisitCompletionModal({ visit, onClose, onComplete }) {
   };
 
   const totalPaid = visit.payments?.reduce((sum, p) => sum + (Number(p.amount_paid) || 0), 0) || 0;
-  const servicePrice = Number(visit.service?.price) || 0;
+  const baseServicePrice = Number(visit.service?.price) || 0;
+  const servicePrice = servicePriceAtDate != null ? servicePriceAtDate : baseServicePrice;
   const isPerToothService = Boolean(visit.service?.per_teeth_service);
   const additionalChargesTotal = billableItems.reduce((sum, item) => {
     const unitPrice = Number(item.unit_price) || 0;

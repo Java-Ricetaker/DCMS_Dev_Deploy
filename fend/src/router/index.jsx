@@ -80,9 +80,7 @@ import DentistScheduleView from "../pages/Dentist/DentistScheduleView";
 
 //
 import NotificationsPage from "../pages/NotificationsPage";
-import PaySuccess from "../pages/payments/PaySuccess";
-import PayFailure from "../pages/payments/PayFailure";
-import PayCancel from "../pages/payments/PayCancel";
+import PaymentRedirect from "../components/PaymentRedirect";
 //
 
 
@@ -244,9 +242,9 @@ export default function AppRouter() {
           <Route path="schedule-view" element={<DentistScheduleView />} />
         </Route>
         {/* Payment Result Routes */}
-        <Route path="/pay/success" element={<PaySuccess />} />
-        <Route path="/pay/failure" element={<PayFailure />} />
-        <Route path="/pay/cancel" element={<PayCancel />} />
+        <Route path="/pay/success" element={<PaymentRedirect to="/patient" />} />
+        <Route path="/pay/failure" element={<PaymentRedirect to="/patient" />} />
+        <Route path="/pay/cancel" element={<PaymentRedirect to="/patient" />} />
         {/* Catch-all for 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>

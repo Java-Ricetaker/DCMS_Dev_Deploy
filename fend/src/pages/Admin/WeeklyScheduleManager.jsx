@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../api/api";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -9,6 +9,7 @@ const weekdayLabels = [
 function WeeklyScheduleManager() {
   const [schedules, setSchedules] = useState([]);
   const [savingId, setSavingId] = useState(null);
+  const [origSchedules, setOrigSchedules] = useState([]);
 
   useEffect(() => { fetchSchedules(); }, []);
 
@@ -16,10 +17,39 @@ function WeeklyScheduleManager() {
     try {
       const res = await api.get("/api/weekly-schedule");
       setSchedules(res.data);
+      setOrigSchedules(res.data);
     } catch (err) {
       console.error("Failed to load weekly schedule", err);
     }
   };
+
+  const normalizeRow = (r) => ({
+    id: r.id,
+    is_open: !!r.is_open,
+    open_time: r.is_open ? (r.open_time || "") : "",
+    close_time: r.is_open ? (r.close_time || "") : "",
+    note: (r.note || "").trim(),
+  });
+
+  const isRowDirty = (curr, orig) => {
+    if (!orig) return true;
+    const a = normalizeRow(curr);
+    const b = normalizeRow(orig);
+    return (
+      a.is_open !== b.is_open ||
+      a.open_time !== b.open_time ||
+      a.close_time !== b.close_time ||
+      a.note !== b.note
+    );
+  };
+
+  const origById = useMemo(() => {
+    const map = {};
+    for (const r of origSchedules) {
+      map[r.id] = r;
+    }
+    return map;
+  }, [origSchedules]);
 
   const handleChange = (id, field, value) => {
     setSchedules(prev =>
@@ -67,6 +97,10 @@ function WeeklyScheduleManager() {
           secondary: '#28a745',
         },
       });
+      // refresh snapshot for this row so Save disables again
+      setOrigSchedules(prev =>
+        prev.map(r => (r.id === id ? normalizeRow(row) : r))
+      );
     } catch (err) {
       console.error("Failed to save", err);
       const errorMessage = err.response?.data?.message || "Save failed. See console.";
@@ -264,7 +298,7 @@ function WeeklyScheduleManager() {
                           <button
                             className="btn btn-sm border-0 shadow-sm"
                             onClick={() => handleSave(s.id)}
-                            disabled={savingId === s.id}
+                            disabled={savingId === s.id || !isRowDirty(s, origById[s.id])}
                             style={{
                               background: savingId === s.id 
                                 ? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'

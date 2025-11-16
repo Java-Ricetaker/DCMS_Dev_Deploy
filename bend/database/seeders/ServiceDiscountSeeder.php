@@ -12,9 +12,16 @@ class ServiceDiscountSeeder extends Seeder
     {
         $today = Carbon::today();
 
-        ServiceDiscount::insert([
-            [
-                'service_id' => 1,
+        $cleaningId = \App\Models\Service::where('name', 'Dental Cleaning')->value('id');
+        $extractionId = \App\Models\Service::where('name', 'Tooth Extraction')->value('id');
+        $fillingId = \App\Models\Service::where('name', 'Tooth Filling')->value('id');
+
+        $rows = [];
+
+        if ($cleaningId) {
+            // Planned promo (future)
+            $rows[] = [
+                'service_id' => $cleaningId,
                 'start_date' => $today->copy()->addDay()->toDateString(),
                 'end_date' => $today->copy()->addDays(3)->toDateString(),
                 'discounted_price' => 1500,
@@ -22,9 +29,10 @@ class ServiceDiscountSeeder extends Seeder
                 'activated_at' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ],
-            [
-                'service_id' => 1,
+            ];
+            // Launched promo (active, must be activated >= 1 day ago)
+            $rows[] = [
+                'service_id' => $cleaningId,
                 'start_date' => $today->toDateString(),
                 'end_date' => $today->copy()->addDays(10)->toDateString(),
                 'discounted_price' => 1300,
@@ -32,9 +40,13 @@ class ServiceDiscountSeeder extends Seeder
                 'activated_at' => $today->copy()->subDay(),
                 'created_at' => now(),
                 'updated_at' => now(),
-            ],
-            [
-                'service_id' => 2,
+            ];
+        }
+
+        if ($extractionId) {
+            // Past promo (should not currently apply)
+            $rows[] = [
+                'service_id' => $extractionId,
                 'start_date' => $today->copy()->subDays(2)->toDateString(),
                 'end_date' => $today->copy()->subDay()->toDateString(),
                 'discounted_price' => 1200,
@@ -42,9 +54,13 @@ class ServiceDiscountSeeder extends Seeder
                 'activated_at' => $today->copy()->subDays(2),
                 'created_at' => now(),
                 'updated_at' => now(),
-            ],
-            [
-                'service_id' => 3,
+            ];
+        }
+
+        if ($fillingId) {
+            // Canceled promo (should not apply)
+            $rows[] = [
+                'service_id' => $fillingId,
                 'start_date' => $today->toDateString(),
                 'end_date' => $today->copy()->addDays(5)->toDateString(),
                 'discounted_price' => 1400,
@@ -52,7 +68,11 @@ class ServiceDiscountSeeder extends Seeder
                 'activated_at' => $today,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ],
-        ]);
+            ];
+        }
+
+        if (!empty($rows)) {
+            ServiceDiscount::insert($rows);
+        }
     }
 }
