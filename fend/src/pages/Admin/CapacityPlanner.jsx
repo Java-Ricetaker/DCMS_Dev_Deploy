@@ -113,6 +113,13 @@ export default function CapacityPlanner() {
     }
   };
 
+  // Disable save if nothing changed
+  const hasAnyChanges = useMemo(() => {
+    if (!rows.length) return false;
+    const origByDate = Object.fromEntries(origRows.map((o) => [o.date, o]));
+    return rows.some((r) => changed(r, origByDate[r.date]));
+  }, [rows, origRows]);
+
   const hasOverCapOpenDay = useMemo(
     () =>
       rows.some(
@@ -130,11 +137,13 @@ export default function CapacityPlanner() {
         <h3 className="m-0">📊 Capacity (next 14 days)</h3>
         <button
           className="btn btn-dark"
-          disabled={saving || loading || hasOverCapOpenDay}
+          disabled={saving || loading || !hasAnyChanges || hasOverCapOpenDay}
           onClick={saveAll}
           title={
             hasOverCapOpenDay
               ? "Fix rows where max same‑time appts exceeds active dentists."
+              : !hasAnyChanges
+              ? "No changes to save."
               : undefined
           }
         >
