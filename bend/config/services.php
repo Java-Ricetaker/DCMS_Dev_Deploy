@@ -51,6 +51,8 @@ return [
         'username' => env('CLICKSEND_USERNAME'),
         'api_key' => env('CLICKSEND_API_KEY'),
         'sender_id' => env('CLICKSEND_SENDER_ID', ''),
+		'fallback_username' => env('CLICKSEND_FALLBACK_USERNAME'),
+		'fallback_api_key' => env('CLICKSEND_FALLBACK_API_KEY'),
     ],
 
     'sms' => [

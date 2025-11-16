@@ -11,6 +11,19 @@ use Illuminate\Support\Facades\Log;
 
 class NotificationService
 {
+		/**
+		 * Low-level helper to send via ClickSend.
+		 */
+		private static function sendViaClickSend(array $payload, string $username, string $apiKey)
+		{
+			$apiUrl = 'https://rest.clicksend.com/v3/sms/send';
+			return Http::withBasicAuth($username, $apiKey)
+				->withHeaders([
+					'Content-Type' => 'application/json',
+				])
+				->post($apiUrl, $payload);
+		}
+
     /**
      * Generic send with SMS logging and whitelisting support.
      * Always creates a notification_logs row; decides whether to send via ClickSend based on env flags and whitelist.
@@ -123,11 +136,15 @@ class NotificationService
         $username = config('services.clicksend.username');
         $apiKey = config('services.clicksend.api_key');
         $senderId = config('services.clicksend.sender_id');
+			$fallbackUsername = config('services.clicksend.fallback_username');
+			$fallbackApiKey = config('services.clicksend.fallback_api_key');
 
         Log::info('[SMS DEBUG] ClickSend configuration check', [
             'username_set' => !empty($username),
             'api_key_set' => !empty($apiKey),
             'sender_id' => $senderId,
+				'fallback_username_set' => !empty($fallbackUsername),
+				'fallback_api_key_set' => !empty($fallbackApiKey),
         ]);
 
         if (empty($username) || empty($apiKey)) {
@@ -144,8 +161,6 @@ class NotificationService
 
         try {
             // ClickSend API endpoint
-            $apiUrl = 'https://rest.clicksend.com/v3/sms/send';
-            
             // Prepare the request payload
             $payload = [
                 'messages' => [
@@ -168,12 +183,8 @@ class NotificationService
                 'message_length' => strlen($message),
             ]);
 
-            // Make HTTP request to ClickSend API
-            $response = Http::withBasicAuth($username, $apiKey)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                ])
-                ->post($apiUrl, $payload);
+				// Attempt with primary credentials
+				$response = self::sendViaClickSend($payload, $username, $apiKey);
 
             $responseData = $response->json();
             $statusCode = $response->status();
@@ -183,7 +194,9 @@ class NotificationService
                 'response' => $responseData,
             ]);
 
-            if ($response->successful() && isset($responseData['response_code']) && $responseData['response_code'] === 'SUCCESS') {
+				$primarySuccess = $response->successful() && isset($responseData['response_code']) && $responseData['response_code'] === 'SUCCESS';
+
+				if ($primarySuccess) {
                 // Extract message ID from response
                 $messageId = null;
                 if (isset($responseData['data']['messages'][0]['message_id'])) {
@@ -198,16 +211,73 @@ class NotificationService
                     'message_id' => $messageId,
                 ]);
             } else {
-                $errorMessage = $responseData['response_msg'] ?? 'Unknown error from ClickSend';
-                $log->update([
-                    'status' => 'failed',
-                    'error'  => $errorMessage,
-                ]);
-                Log::error("[SMS DEBUG] SMS failed to {$to}", [
-                    'status_code' => $statusCode,
-                    'error_message' => $errorMessage,
-                    'response' => $responseData,
-                ]);
+					// Determine if error suggests insufficient credits (best-effort string match)
+					$primaryErrorMsg = $responseData['response_msg'] ?? '';
+					$insufficientCredit = is_string($primaryErrorMsg) && stripos($primaryErrorMsg, 'credit') !== false;
+
+					// If fallback configured, try once (either on any failure, or only on insufficient credits)
+					$shouldTryFallback = !empty($fallbackUsername) && !empty($fallbackApiKey);
+
+					if ($shouldTryFallback) {
+						Log::warning('[SMS DEBUG] Primary ClickSend attempt failed; trying fallback credentials', [
+							'status_code' => $statusCode,
+							'primary_response' => $responseData,
+							'detected_insufficient_credit' => $insufficientCredit,
+						]);
+
+						$fbResponse = self::sendViaClickSend($payload, $fallbackUsername, $fallbackApiKey);
+						$fbData = $fbResponse->json();
+						$fbStatus = $fbResponse->status();
+						$fallbackSuccess = $fbResponse->successful() && isset($fbData['response_code']) && $fbData['response_code'] === 'SUCCESS';
+
+						if ($fallbackSuccess) {
+							$messageId = $fbData['data']['messages'][0]['message_id'] ?? null;
+							$existingMeta = is_array($log->meta ?? null) ? $log->meta : [];
+							$log->update([
+								'status' => 'sent',
+								'provider_message_id' => $messageId,
+								'meta' => array_merge($existingMeta, [
+									'fallback_used' => true,
+									'primary_error' => $primaryErrorMsg ?: 'Unknown',
+								]),
+							]);
+							Log::info("[SMS DEBUG] SMS sent successfully via fallback to {$to}", [
+								'message_id' => $messageId,
+							]);
+							return;
+						}
+
+						// Fallback failed too
+						$errorMessage = $fbData['response_msg'] ?? 'Unknown error from ClickSend (fallback)';
+						$existingMeta = is_array($log->meta ?? null) ? $log->meta : [];
+						$log->update([
+							'status' => 'failed',
+							'error'  => $errorMessage,
+							'meta'   => array_merge($existingMeta, [
+								'fallback_used' => true,
+								'primary_error' => $primaryErrorMsg ?: 'Unknown',
+							]),
+						]);
+						Log::error("[SMS DEBUG] SMS failed via fallback to {$to}", [
+							'primary_status_code' => $statusCode,
+							'primary_response' => $responseData,
+							'fallback_status_code' => $fbStatus,
+							'fallback_response' => $fbData,
+						]);
+						return;
+					}
+
+					// No fallback configured or not attempted
+					$errorMessage = $primaryErrorMsg ?: 'Unknown error from ClickSend';
+					$log->update([
+						'status' => 'failed',
+						'error'  => $errorMessage,
+					]);
+					Log::error("[SMS DEBUG] SMS failed to {$to}", [
+						'status_code' => $statusCode,
+						'error_message' => $errorMessage,
+						'response' => $responseData,
+					]);
             }
         } catch (\Throwable $e) {
             $log->update([
