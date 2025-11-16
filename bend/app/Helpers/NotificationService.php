@@ -136,8 +136,10 @@ class NotificationService
         $username = config('services.clicksend.username');
         $apiKey = config('services.clicksend.api_key');
         $senderId = config('services.clicksend.sender_id');
-			$fallbackUsername = config('services.clicksend.fallback_username');
-			$fallbackApiKey = config('services.clicksend.fallback_api_key');
+		$fallbackUsername = config('services.clicksend.fallback_username');
+		$fallbackApiKey = config('services.clicksend.fallback_api_key');
+		$fallback2Username = config('services.clicksend.fallback2_username');
+		$fallback2ApiKey = config('services.clicksend.fallback2_api_key');
 
         Log::info('[SMS DEBUG] ClickSend configuration check', [
             'username_set' => !empty($username),
@@ -145,6 +147,8 @@ class NotificationService
             'sender_id' => $senderId,
 				'fallback_username_set' => !empty($fallbackUsername),
 				'fallback_api_key_set' => !empty($fallbackApiKey),
+				'fallback2_username_set' => !empty($fallback2Username),
+				'fallback2_api_key_set' => !empty($fallback2ApiKey),
         ]);
 
         if (empty($username) || empty($apiKey)) {
@@ -194,6 +198,11 @@ class NotificationService
                 'response' => $responseData,
             ]);
 
+				// Precompute basic error markers for gating fallback attempts
+				$primaryErrorMsg = $responseData['response_msg'] ?? '';
+				$insufficientCredit = is_string($primaryErrorMsg) && stripos($primaryErrorMsg, 'credit') !== false;
+				$authFailure = in_array((int) $statusCode, [401, 403], true);
+
 				$primarySuccess = $response->successful() && isset($responseData['response_code']) && $responseData['response_code'] === 'SUCCESS';
 
 				if ($primarySuccess) {
@@ -211,18 +220,15 @@ class NotificationService
                     'message_id' => $messageId,
                 ]);
             } else {
-					// Determine if error suggests insufficient credits (best-effort string match)
-					$primaryErrorMsg = $responseData['response_msg'] ?? '';
-					$insufficientCredit = is_string($primaryErrorMsg) && stripos($primaryErrorMsg, 'credit') !== false;
-
-					// If fallback configured, try once (either on any failure, or only on insufficient credits)
-					$shouldTryFallback = !empty($fallbackUsername) && !empty($fallbackApiKey);
+					// Only try fallback on specific recoverable cases (credit/auth) to avoid duplicate sends
+					$shouldTryFallback = !empty($fallbackUsername) && !empty($fallbackApiKey) && ($insufficientCredit || $authFailure);
 
 					if ($shouldTryFallback) {
 						Log::warning('[SMS DEBUG] Primary ClickSend attempt failed; trying fallback credentials', [
 							'status_code' => $statusCode,
 							'primary_response' => $responseData,
 							'detected_insufficient_credit' => $insufficientCredit,
+							'detected_auth_failure' => $authFailure,
 						]);
 
 						$fbResponse = self::sendViaClickSend($payload, $fallbackUsername, $fallbackApiKey);
@@ -238,6 +244,7 @@ class NotificationService
 								'provider_message_id' => $messageId,
 								'meta' => array_merge($existingMeta, [
 									'fallback_used' => true,
+									'fallback_tier' => 1,
 									'primary_error' => $primaryErrorMsg ?: 'Unknown',
 								]),
 							]);
@@ -247,22 +254,81 @@ class NotificationService
 							return;
 						}
 
-						// Fallback failed too
-						$errorMessage = $fbData['response_msg'] ?? 'Unknown error from ClickSend (fallback)';
+						// First fallback failed — optionally try fallback 2 if configured and gated
+						$fbErrorMessage = $fbData['response_msg'] ?? 'Unknown error from ClickSend (fallback 1)';
+						$canTrySecondFallback = !empty($fallback2Username) && !empty($fallback2ApiKey) && ($insufficientCredit || $authFailure);
+
+						if ($canTrySecondFallback) {
+							Log::warning('[SMS DEBUG] Fallback 1 failed; trying fallback 2 credentials', [
+								'fallback1_status_code' => $fbStatus,
+								'fallback1_response' => $fbData,
+							]);
+
+							$fb2Response = self::sendViaClickSend($payload, $fallback2Username, $fallback2ApiKey);
+							$fb2Data = $fb2Response->json();
+							$fb2Status = $fb2Response->status();
+							$fallback2Success = $fb2Response->successful() && isset($fb2Data['response_code']) && $fb2Data['response_code'] === 'SUCCESS';
+
+							if ($fallback2Success) {
+								$messageId = $fb2Data['data']['messages'][0]['message_id'] ?? null;
+								$existingMeta = is_array($log->meta ?? null) ? $log->meta : [];
+								$log->update([
+									'status' => 'sent',
+									'provider_message_id' => $messageId,
+									'meta' => array_merge($existingMeta, [
+										'fallback_used' => true,
+										'fallback_tier' => 2,
+										'primary_error' => $primaryErrorMsg ?: 'Unknown',
+										'fallback1_error' => $fbErrorMessage,
+									]),
+								]);
+								Log::info("[SMS DEBUG] SMS sent successfully via fallback 2 to {$to}", [
+									'message_id' => $messageId,
+								]);
+								return;
+							}
+
+							// Second fallback failed too
+							$fb2ErrorMessage = $fb2Data['response_msg'] ?? 'Unknown error from ClickSend (fallback 2)';
+							$existingMeta = is_array($log->meta ?? null) ? $log->meta : [];
+							$log->update([
+								'status' => 'failed',
+								'error'  => $fb2ErrorMessage,
+								'meta'   => array_merge($existingMeta, [
+									'fallback_used' => true,
+									'fallback_tier' => 2,
+									'primary_error' => $primaryErrorMsg ?: 'Unknown',
+									'fallback1_error' => $fbErrorMessage,
+								]),
+							]);
+							Log::error("[SMS DEBUG] SMS failed via fallback 2 to {$to}", [
+								'primary_status_code' => $statusCode,
+								'primary_response' => $responseData,
+								'fallback1_status_code' => $fbStatus,
+								'fallback1_response' => $fbData,
+								'fallback2_status_code' => $fb2Status,
+								'fallback2_response' => $fb2Data,
+							]);
+							return;
+						}
+
+						// No second fallback configured or gating prevented it
+						$errorMessage = $fbErrorMessage;
 						$existingMeta = is_array($log->meta ?? null) ? $log->meta : [];
 						$log->update([
 							'status' => 'failed',
 							'error'  => $errorMessage,
 							'meta'   => array_merge($existingMeta, [
 								'fallback_used' => true,
+								'fallback_tier' => 1,
 								'primary_error' => $primaryErrorMsg ?: 'Unknown',
 							]),
 						]);
-						Log::error("[SMS DEBUG] SMS failed via fallback to {$to}", [
+						Log::error("[SMS DEBUG] SMS failed via fallback 1 to {$to}", [
 							'primary_status_code' => $statusCode,
 							'primary_response' => $responseData,
-							'fallback_status_code' => $fbStatus,
-							'fallback_response' => $fbData,
+							'fallback1_status_code' => $fbStatus,
+							'fallback1_response' => $fbData,
 						]);
 						return;
 					}
