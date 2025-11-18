@@ -9,6 +9,8 @@ import MedicalHistoryFormModal from "./MedicalHistoryFormModal";
 import TimeBlockModal from "./TimeBlockModal";
 import toast from "react-hot-toast";
 
+const VISIT_TRACKER_VIEW_OFFSET = 260;
+
 function VisitTrackerManager({ initialVisitType, initialRefCode }) {
   const [visits, setVisits] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -24,13 +26,26 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
   const [offeredAppointment, setOfferedAppointment] = useState(false);
   const [editingVisit, setEditingVisit] = useState(null);
   const [editForm, setEditForm] = useState({
+    patient_id: "",
     first_name: "",
     last_name: "",
     contact: "",
     service_id: "",
   });
+  const [editTab, setEditTab] = useState("existing");
+  const [existingPatientSearch, setExistingPatientSearch] = useState("");
+  const [existingPatientResults, setExistingPatientResults] = useState([]);
+  const [existingPatientLoading, setExistingPatientLoading] = useState(false);
+  const [selectedExistingPatient, setSelectedExistingPatient] = useState(null);
+  const existingPatientSearchDelayRef = useRef(null);
+  const [existingPatientInputFocused, setExistingPatientInputFocused] = useState(false);
+  const existingPatientBlurTimeoutRef = useRef(null);
+  const [newPatientForm, setNewPatientForm] = useState({
+    first_name: "",
+    last_name: "",
+    contact: "",
+  });
   const [availableServices, setAvailableServices] = useState([]);
-  const [showLinkModal, setShowLinkModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [matchingPatients, setMatchingPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -116,6 +131,9 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
     present: false,
   });
   const [slotMetadataStaff, setSlotMetadataStaff] = useState(null);
+  const [viewportHeight, setViewportHeight] = useState(() => (
+    typeof window !== "undefined" ? window.innerHeight : 1000
+  ));
   const dentistScheduledOnSelectedDate =
     !!(
       appointmentForm.date &&
@@ -128,6 +146,15 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
 
   useEffect(() => {
     fetchVisits();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const handleResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   // Debug: Log when visits state changes
@@ -160,6 +187,56 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
       }
     }
   }, [initialVisitType, initialRefCode, location.search]);
+
+  useEffect(() => {
+    if (!editingVisit || editTab !== "existing") {
+      if (existingPatientSearchDelayRef.current) {
+        clearTimeout(existingPatientSearchDelayRef.current);
+        existingPatientSearchDelayRef.current = null;
+      }
+      return;
+    }
+
+    const term = existingPatientSearch.trim();
+
+    if (term.length < 2) {
+      if (existingPatientSearchDelayRef.current) {
+        clearTimeout(existingPatientSearchDelayRef.current);
+        existingPatientSearchDelayRef.current = null;
+      }
+      setExistingPatientResults([]);
+      setExistingPatientLoading(false);
+      return;
+    }
+
+    if (existingPatientSearchDelayRef.current) {
+      clearTimeout(existingPatientSearchDelayRef.current);
+      existingPatientSearchDelayRef.current = null;
+    }
+
+    setExistingPatientLoading(true);
+
+    existingPatientSearchDelayRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get("/api/patients/search", {
+          params: { q: term },
+        });
+        setExistingPatientResults(res.data || []);
+      } catch (err) {
+        console.error("Failed to search patients", err);
+        setExistingPatientResults([]);
+      } finally {
+        setExistingPatientLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (existingPatientSearchDelayRef.current) {
+        clearTimeout(existingPatientSearchDelayRef.current);
+        existingPatientSearchDelayRef.current = null;
+      }
+    };
+  }, [existingPatientSearch, editTab, editingVisit]);
 
   const fetchVisits = async () => {
     setLoading(true);
@@ -316,10 +393,21 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
 
   const handleEditClick = async (visit) => {
     setEditingVisit(visit);
+    setEditTab("existing");
+    setExistingPatientSearch(visit.patient?.last_name || "");
+    setExistingPatientResults([]);
+    setExistingPatientLoading(false);
+    setSelectedExistingPatient(visit.patient ? { ...visit.patient } : null);
+    setNewPatientForm({
+      first_name: "",
+      last_name: "",
+      contact: "",
+    });
     setEditForm({
+      patient_id: visit.patient?.id ? String(visit.patient.id) : "",
       first_name: visit.patient?.first_name || "",
       last_name: visit.patient?.last_name || "",
-      contact: visit.patient?.contact || "",
+      contact: visit.patient?.contact_number || visit.patient?.contact || "",
       service_id: visit.service_id || "",
     });
 
@@ -335,42 +423,105 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
     }
   };
 
-  const handleEditSave = async () => {
-    try {
-      const response = await api.put(`/api/visits/${editingVisit.id}/update-patient`, {
-        first_name: editForm.first_name,
-        last_name: editForm.last_name,
-        contact_number:
-          editForm.contact.trim() !== ""
-            ? editForm.contact.trim()
-            : editingVisit.patient?.contact_number,
-        service_id: editForm.service_id || null,
-      });
-      
-      // Check if there are potential matching patients
-      if (response.data.potential_matches && response.data.potential_matches.length > 0) {
-        setPotentialMatches(response.data.potential_matches);
-        setShowMatchesModal(true);
-        // Keep editingVisit open so user can link if needed
-        // Don't fetchVisits here to avoid race condition
-      } else {
-        const savedEditingVisit = editingVisit; // Store before clearing
-        setEditingVisit(null);
-        await fetchVisits();
-        
-        // NEW: Auto-open medical history modal for walk-in after edit save
-        // Check if this is a walk-in (no appointment_id) and service is selected
-        if (!savedEditingVisit.appointment_id && editForm.service_id) {
-          try {
-            const updatedVisitResponse = await api.get(`/api/visits/${savedEditingVisit.id}`);
-            if (updatedVisitResponse.data.medical_history_status === 'pending') {
-              setMedicalHistoryVisit(updatedVisitResponse.data);
-              setShowMedicalHistoryModal(true);
-            }
-          } catch (err) {
-            console.error("Failed to fetch updated visit for medical history:", err);
-          }
+  const handleExistingPatientSelect = (patient) => {
+    if (!patient) return;
+
+    if (existingPatientBlurTimeoutRef.current) {
+      clearTimeout(existingPatientBlurTimeoutRef.current);
+      existingPatientBlurTimeoutRef.current = null;
+    }
+
+    setSelectedExistingPatient(patient);
+    setEditForm((prev) => ({
+      ...prev,
+      patient_id: patient.id ? String(patient.id) : "",
+      first_name: patient.first_name || "",
+      last_name: patient.last_name || "",
+      contact: patient.contact_number || patient.contact || "",
+    }));
+    setExistingPatientSearch(patient.last_name || "");
+    setExistingPatientResults([]);
+  };
+
+  const finalizeEditFlow = async (savedEditingVisit, serviceIdForCheck) => {
+    setEditingVisit(null);
+    await fetchVisits();
+
+    if (!savedEditingVisit?.appointment_id && serviceIdForCheck) {
+      try {
+        const updatedVisitResponse = await api.get(`/api/visits/${savedEditingVisit.id}`);
+        if (updatedVisitResponse.data.medical_history_status === 'pending') {
+          setMedicalHistoryVisit(updatedVisitResponse.data);
+          setShowMedicalHistoryModal(true);
         }
+      } catch (err) {
+        console.error("Failed to fetch updated visit for medical history:", err);
+      }
+    }
+  };
+
+  const handleUpdateResponse = async (response, savedEditingVisit, serviceIdForCheck) => {
+    if (response?.data?.potential_matches && response.data.potential_matches.length > 0) {
+      setPotentialMatches(response.data.potential_matches);
+      setShowMatchesModal(true);
+    } else {
+      await finalizeEditFlow(savedEditingVisit, serviceIdForCheck);
+    }
+  };
+
+  const handleEditSave = async () => {
+    if (!editingVisit) return;
+
+    const savedEditingVisit = editingVisit;
+
+    try {
+      if (editTab === "existing") {
+        const shouldLinkExisting =
+          selectedExistingPatient &&
+          selectedExistingPatient.id &&
+          selectedExistingPatient.id !== savedEditingVisit.patient?.id;
+
+        if (shouldLinkExisting) {
+          const payload = {
+            target_patient_id: selectedExistingPatient.id,
+          };
+          if (editForm.service_id) {
+            payload.service_id = editForm.service_id;
+          }
+          await api.post(`/api/visits/${savedEditingVisit.id}/link-existing`, payload);
+          await api.put(`/api/visits/${savedEditingVisit.id}/update-patient`, {
+            first_name: editForm.first_name,
+            last_name: editForm.last_name,
+            contact_number:
+              editForm.contact.trim() !== ""
+                ? editForm.contact.trim()
+                : savedEditingVisit.patient?.contact_number,
+            service_id: editForm.service_id || null,
+          });
+          await finalizeEditFlow(savedEditingVisit, editForm.service_id);
+          return;
+        }
+
+        const response = await api.put(`/api/visits/${savedEditingVisit.id}/update-patient`, {
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          contact_number:
+            editForm.contact.trim() !== ""
+              ? editForm.contact.trim()
+              : savedEditingVisit.patient?.contact_number,
+          service_id: editForm.service_id || null,
+        });
+
+        await handleUpdateResponse(response, savedEditingVisit, editForm.service_id);
+      } else {
+        const response = await api.put(`/api/visits/${savedEditingVisit.id}/update-patient`, {
+          first_name: newPatientForm.first_name.trim(),
+          last_name: newPatientForm.last_name.trim(),
+          contact_number: newPatientForm.contact.trim(),
+          service_id: editForm.service_id || null,
+        });
+
+        await handleUpdateResponse(response, savedEditingVisit, editForm.service_id);
       }
     } catch (err) {
       toast.error("Failed to update patient.");
@@ -665,8 +816,38 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
     }
   };
 
+  const existingPatientFormValid = Boolean(
+    editForm.patient_id &&
+      editForm.last_name.trim() &&
+      editForm.contact.trim() &&
+      editForm.service_id
+  );
+
+  const newPatientFormValid = Boolean(
+    newPatientForm.first_name.trim() &&
+      newPatientForm.last_name.trim() &&
+      newPatientForm.contact.trim() &&
+      editForm.service_id
+  );
+
+  const isEditSaveDisabled =
+    editTab === "existing" ? !existingPatientFormValid : !newPatientFormValid;
+
+  const visitTrackerViewportHeight = Math.max(
+    560,
+    viewportHeight - VISIT_TRACKER_VIEW_OFFSET
+  );
+
   return (
-    <div className="h-100 d-flex flex-column">
+    <div
+      className="h-100 d-flex flex-column"
+      style={{
+        minHeight: `${visitTrackerViewportHeight}px`,
+        maxHeight: `${visitTrackerViewportHeight}px`,
+        overflowY: "auto",
+        paddingRight: "0.5rem"
+      }}
+    >
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h3>📝 Patient Visit Tracker</h3>
         <button
@@ -1094,36 +1275,166 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
                 ></button>
               </div>
               <div className="modal-body">
-                <label className="form-label">First Name</label>
-                <input
-                  className="form-control mb-2"
-                  value={editForm.first_name}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, first_name: e.target.value })
-                  }
-                />
-                <label className="form-label">Last Name</label>
-                <input
-                  className="form-control mb-2"
-                  value={editForm.last_name}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, last_name: e.target.value })
-                  }
-                />
-                <label className="form-label">Contact</label>
-                <input
-                  className="form-control mb-2"
-                  value={editForm.contact}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, contact: e.target.value })
-                  }
-                />
+                <ul className="nav nav-tabs mb-3">
+                  <li className="nav-item">
+                    <button
+                      type="button"
+                      className={`nav-link ${editTab === "existing" ? "active" : ""}`}
+                      onClick={() => {
+                        setEditTab("existing");
+                        setExistingPatientResults([]);
+                        setExistingPatientSearch(editForm.last_name || "");
+                      }}
+                    >
+                      Existing Patient
+                    </button>
+                  </li>
+                  <li className="nav-item">
+                    <button
+                      type="button"
+                      className={`nav-link ${editTab === "new" ? "active" : ""}`}
+                      onClick={() => {
+                        setEditTab("new");
+                        setExistingPatientResults([]);
+                      }}
+                    >
+                      New Patient
+                    </button>
+                  </li>
+                </ul>
+
+                {editTab === "existing" && (
+                  <>
+                    <label className="form-label">Patient ID</label>
+                    <input
+                      className="form-control mb-2"
+                      value={editForm.patient_id || ""}
+                      readOnly
+                      placeholder="Select a patient"
+                    />
+                    <label className="form-label">Patient Surname</label>
+                    <div className="position-relative mb-2">
+                      <input
+                        className="form-control"
+                        value={existingPatientSearch}
+                        onFocus={() => {
+                          if (existingPatientBlurTimeoutRef.current) {
+                            clearTimeout(existingPatientBlurTimeoutRef.current);
+                            existingPatientBlurTimeoutRef.current = null;
+                          }
+                          setExistingPatientInputFocused(true);
+                        }}
+                        onBlur={() => {
+                          existingPatientBlurTimeoutRef.current = setTimeout(() => {
+                            setExistingPatientInputFocused(false);
+                          }, 120);
+                        }}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setExistingPatientSearch(value);
+                          setEditForm((prev) => {
+                            const next = { ...prev, last_name: value };
+                            if (!value) {
+                              next.patient_id = "";
+                              next.first_name = "";
+                            }
+                            return next;
+                          });
+                          if (!value) {
+                            setSelectedExistingPatient(null);
+                          }
+                        }}
+                        placeholder="Search by surname (min 2 characters)"
+                      />
+                      {existingPatientLoading && (
+                        <span className="spinner-border spinner-border-sm text-secondary position-absolute top-50 end-0 translate-middle-y me-2"></span>
+                      )}
+                      {existingPatientInputFocused &&
+                        existingPatientResults.length > 0 && (
+                        <div
+                          className="list-group position-absolute w-100 shadow-sm"
+                          style={{ zIndex: 10, maxHeight: "220px", overflowY: "auto" }}
+                        >
+                          {existingPatientResults.map((patient) => (
+                            <button
+                              type="button"
+                              className={`list-group-item list-group-item-action ${
+                                selectedExistingPatient?.id === patient.id ? "active" : ""
+                              }`}
+                              key={patient.id}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleExistingPatientSelect(patient)}
+                            >
+                              <div className="fw-semibold">
+                                {patient.last_name}, {patient.first_name}
+                              </div>
+                              <div className="small text-muted">
+                                ID: {patient.id} • {patient.contact_number || "No contact"}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-text mb-3">
+                      Start typing at least 2 letters to search by surname. Results appear as "surname, firstname".
+                    </div>
+                    <label className="form-label">Contact Number</label>
+                    <input
+                      className="form-control mb-3"
+                      value={editForm.contact}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, contact: e.target.value }))
+                      }
+                      placeholder="Enter contact number"
+                    />
+                  </>
+                )}
+
+                {editTab === "new" && (
+                  <>
+                    <label className="form-label">First Name *</label>
+                    <input
+                      className="form-control mb-2"
+                      value={newPatientForm.first_name}
+                      onChange={(e) =>
+                        setNewPatientForm((prev) => ({
+                          ...prev,
+                          first_name: e.target.value,
+                        }))
+                      }
+                    />
+                    <label className="form-label">Last Name *</label>
+                    <input
+                      className="form-control mb-2"
+                      value={newPatientForm.last_name}
+                      onChange={(e) =>
+                        setNewPatientForm((prev) => ({
+                          ...prev,
+                          last_name: e.target.value,
+                        }))
+                      }
+                    />
+                    <label className="form-label">Contact Number *</label>
+                    <input
+                      className="form-control mb-3"
+                      value={newPatientForm.contact}
+                      onChange={(e) =>
+                        setNewPatientForm((prev) => ({
+                          ...prev,
+                          contact: e.target.value,
+                        }))
+                      }
+                    />
+                  </>
+                )}
+
                 <label className="form-label">Service</label>
                 <select
                   className="form-select"
                   value={editForm.service_id}
                   onChange={(e) =>
-                    setEditForm({ ...editForm, service_id: e.target.value })
+                    setEditForm((prev) => ({ ...prev, service_id: e.target.value }))
                   }
                 >
                   <option value="">— Select —</option>
@@ -1140,19 +1451,6 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
                     </option>
                   ))}
                 </select>
-                <hr />
-                <button
-                  className="btn btn-outline-secondary"
-                  onClick={() => {
-                    // trigger modal to search existing patients
-                    setShowLinkModal(true);
-                    setSearchQuery("");
-                    setMatchingPatients([]);
-                    setSelectedPatient(null);
-                  }}
-                >
-                  🔗 Link to Existing Patient
-                </button>
               </div>
               <div className="modal-footer">
                 <button
@@ -1161,148 +1459,12 @@ function VisitTrackerManager({ initialVisitType, initialRefCode }) {
                 >
                   Cancel
                 </button>
-                <button className="btn btn-primary" onClick={handleEditSave}>
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showLinkModal && (
-        <div className="modal show d-block" tabIndex="-1">
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Link to Existing Patient</h5>
-                <button
-                  className="btn-close"
-                  onClick={() => setShowLinkModal(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <input
-                  className="form-control mb-2"
-                  placeholder="Search by name or contact (min 2 characters)"
-                  value={searchQuery}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    setSearchQuery(val);
-                    setMatchingPatients([]);
-                    setSelectedPatient(null);
-
-                    if (val.length >= 2) {
-                      try {
-                        const res = await api.get("/api/patients/search", {
-                          params: { q: val.trim() },
-                        });
-                        setMatchingPatients(res.data);
-                      } catch {
-                        toast.error("Search failed.");
-                      }
-                    }
-                  }}
-                />
-
-                {matchingPatients.filter(
-                  (p) => p.id !== editingVisit?.patient?.id
-                ).length > 0 ? (
-                  <table className="table table-sm">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Contact</th>
-                        <th>Birthdate</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {matchingPatients
-                        .filter((p) => p.id !== editingVisit?.patient?.id)
-                        .map((p) => (
-                          <tr key={p.id}>
-                            <td>
-                              {p.first_name} {p.last_name}
-                            </td>
-                            <td>{p.contact_number || "—"}</td>
-                            <td>{p.birthdate ? new Date(p.birthdate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : "—"}</td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => setSelectedPatient(p)}
-                              >
-                                Select
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <table className="table table-sm">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Contact</th>
-                        <th>Birthdate</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td colSpan="4" className="text-muted text-center">
-                          No matching patients found.
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                )}
-
-                {selectedPatient && (
-                  <div className="alert alert-info mt-3">
-                    Link current visit to{" "}
-                    <strong>
-                      {selectedPatient.first_name} {selectedPatient.last_name}
-                    </strong>
-                    ?
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowLinkModal(false)}
-                >
-                  Cancel
-                </button>
                 <button
                   className="btn btn-primary"
-                  disabled={!selectedPatient}
-                  onClick={async () => {
-                    try {
-                      const payload = {
-                        target_patient_id: selectedPatient.id,
-                      };
-                      
-                      // Preserve service_id if it was selected in the edit form
-                      if (editForm.service_id) {
-                        payload.service_id = editForm.service_id;
-                      }
-                      
-                      await api.post(
-                        `/api/visits/${editingVisit.id}/link-existing`,
-                        payload
-                      );
-                      setShowLinkModal(false);
-                      setEditingVisit(null);
-                      await fetchVisits();
-                    } catch {
-                      toast.error("Failed to link to patient.");
-                    }
-                  }}
+                  onClick={handleEditSave}
+                  disabled={isEditSaveDisabled}
                 >
-                  Confirm Link
+                  Save
                 </button>
               </div>
             </div>

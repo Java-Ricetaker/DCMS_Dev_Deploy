@@ -53,7 +53,8 @@ function AdminAppointmentManager() {
         maxWidth: '100%',
         padding: '1.5rem',
         boxSizing: 'border-box',
-        overflow: 'hidden'
+        overflowX: 'hidden',
+        overflowY: 'auto'
       }}
     >
       <div className="row g-2 g-md-3 g-lg-4 m-0">
