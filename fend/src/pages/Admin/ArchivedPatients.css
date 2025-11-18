@@ -1,0 +1,39 @@
+.archived-patients-page {
+  padding: 1.5rem;
+}
+
+.archived-patients-page .card {
+  border: none;
+  border-radius: 1rem;
+}
+
+.archived-patients-page .card-header {
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.archived-search-group .form-control:focus {
+  box-shadow: none;
+}
+
+.archived-patients-page table th {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.archived-patients-page table td {
+  vertical-align: middle;
+}
+
+@media (max-width: 768px) {
+  .archived-patients-page {
+    padding: 1rem 0.5rem;
+  }
+
+  .archived-patients-page .card-header {
+    border-radius: 1rem 1rem 0 0;
+  }
+}
+

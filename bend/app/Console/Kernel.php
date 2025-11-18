@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('appointments:mark-no-shows')->everyFifteenMinutes();
         $schedule->command('goals:update-progress')->dailyAt('01:15');
         $schedule->command('promos:auto-cancel-expired')->dailyAt('02:00');
+        $schedule->command('patients:archive-inactive')->dailyAt('03:30');
         
         // Retry queued emails every 5 minutes
         $schedule->command('emails:retry-queued --limit=20')->everyFiveMinutes();

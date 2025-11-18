@@ -51,6 +51,23 @@ class AuthenticatedSessionController extends Controller
         ], 403);
     }
 
+    // Prevent archived patient accounts from logging in
+    if ($user->role === 'patient') {
+        $patient = $user->patient()->first();
+
+        if ($patient && $patient->archived_at) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This account has been archived due to inactivity. Please contact the clinic to reactivate your access.',
+                'archived' => true,
+            ], 423);
+        }
+    }
+
     // Check if password change is required for dentists
     if ($user->role === 'dentist') {
         $dentistSchedule = DentistSchedule::where('email', $user->email)->first();

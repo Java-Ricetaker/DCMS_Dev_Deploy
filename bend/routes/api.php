@@ -20,6 +20,7 @@ use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\API\InventoryItemController;
 use App\Http\Controllers\Admin\StaffAccountController;
+use App\Http\Controllers\Admin\ArchivedPatientController;
 use App\Http\Controllers\API\ClinicCalendarController;
 use App\Http\Controllers\Staff\PatientVisitController;
 use App\Http\Controllers\API\AppointmentSlotController;
@@ -134,6 +135,10 @@ Route::middleware(['auth:sanctum', 'check.account.status', AdminOnly::class])->g
     Route::post('/services', [ServiceController::class, 'store']);
     Route::put('/services/{service}', [ServiceController::class, 'update']);
     Route::delete('/services/{service}', [ServiceController::class, 'destroy']);
+
+    // Archived patients
+    Route::get('/admin/archived-patients', [ArchivedPatientController::class, 'index']);
+    Route::post('/admin/archived-patients/{patient}/reactivate', [ArchivedPatientController::class, 'reactivate'])->whereNumber('patient');
 
     // Service category management
     Route::get('/service-categories', [ServiceCategoryController::class, 'index']);

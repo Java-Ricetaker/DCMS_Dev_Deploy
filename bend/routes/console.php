@@ -23,6 +23,7 @@ Schedule::job(new \App\Jobs\EmailAppointmentReminderJob)->dailyAt('06:00');
 
 // Add the inventory scan near expiry command
 Schedule::command('inventory:scan-near-expiry')->dailyAt('08:00');
+Schedule::command('patients:archive-inactive')->dailyAt('03:30');
 
 Artisan::command('mail:test', function () {
     $recipient = config('mail.from.address');

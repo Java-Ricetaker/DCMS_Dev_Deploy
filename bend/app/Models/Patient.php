@@ -4,7 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Log;
 use App\Services\PreferredDentistService;
 use Carbon\Carbon;
@@ -29,6 +32,9 @@ class Patient extends Model
         'last_login_ip',
         'policy_history_id',
         'policy_accepted_at',
+        'archived_at',
+        'archived_by',
+        'archived_reason',
     ];
 
     protected $casts = [
@@ -38,6 +44,7 @@ class Patient extends Model
         'recent_ip_addresses' => 'array',
         'last_login_at' => 'datetime',
         'policy_accepted_at' => 'datetime',
+        'archived_at' => 'datetime',
     ];
 
     public function user()
@@ -60,6 +67,11 @@ class Patient extends Model
         return $this->belongsTo(PolicyHistory::class, 'policy_history_id');
     }
 
+    public function archivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'archived_by');
+    }
+
     public function feedbackResponses()
     {
         return $this->hasMany(PatientFeedback::class);
@@ -68,6 +80,42 @@ class Patient extends Model
     public function appointments()
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    public function completedVisits(): HasMany
+    {
+        return $this->hasMany(PatientVisit::class)->where('patient_visits.status', 'completed');
+    }
+
+    public function latestCompletedVisit(): HasOne
+    {
+        return $this->hasOne(PatientVisit::class)
+            ->where('patient_visits.status', 'completed')
+            ->orderByDesc('visit_date')
+            ->orderByDesc('id');
+    }
+
+    public function scopeWithLastVisitDate(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'last_visit_date' => PatientVisit::select('visit_date')
+                ->whereColumn('patient_visits.patient_id', 'patients.id')
+                ->where('patient_visits.status', 'completed')
+                ->latest('visit_date')
+                ->limit(1),
+        ]);
+    }
+
+    public function getLastVisitDateAttribute(): ?Carbon
+    {
+        if (array_key_exists('last_visit_date', $this->attributes)) {
+            $value = $this->attributes['last_visit_date'];
+            return $value ? Carbon::parse($value) : null;
+        }
+
+        $visit = $this->latestCompletedVisit()->select('visit_date')->first();
+
+        return $visit?->visit_date ? Carbon::parse($visit->visit_date) : null;
     }
 
     public static function byUser($userId)

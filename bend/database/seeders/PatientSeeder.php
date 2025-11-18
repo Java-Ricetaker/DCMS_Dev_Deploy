@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\Patient;
 use Illuminate\Database\Seeder;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class PatientSeeder extends Seeder
 {
@@ -43,6 +42,8 @@ class PatientSeeder extends Seeder
             'contact_number' => '09179876543',
             'address' => 'Santa Rosa, Laguna',
             'is_linked' => true,
+            'archived_at' => now()->subYears(6),
+            'archived_reason' => 'No activity in 5+ years (seeded)',
         ]);
     }
 }
