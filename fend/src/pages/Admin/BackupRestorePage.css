@@ -1,0 +1,120 @@
+.backup-restore-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.backup-restore-page .card {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+  margin-bottom: 1.5rem;
+}
+
+.backup-restore-page .card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem 1.5rem;
+}
+
+.backup-restore-page .card-header.bg-danger {
+  background-color: #dc3545 !important;
+  color: white;
+}
+
+.backup-restore-page .card-body {
+  padding: 1.5rem;
+}
+
+.backup-restore-page .table {
+  margin-bottom: 0;
+}
+
+.backup-restore-page .table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.backup-restore-page .table td {
+  vertical-align: middle;
+}
+
+.backup-restore-page .table code {
+  font-size: 0.875rem;
+  background-color: #f8f9fa;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.backup-restore-page .btn-group-sm .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.backup-restore-page .alert {
+  margin-bottom: 1rem;
+}
+
+.backup-restore-page .alert-info {
+  background-color: #d1ecf1;
+  border-color: #bee5eb;
+  color: #0c5460;
+}
+
+.backup-restore-page .alert-danger {
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+  color: #721c24;
+}
+
+.backup-restore-page .alert-warning {
+  background-color: #fff3cd;
+  border-color: #ffeaa7;
+  color: #856404;
+}
+
+.backup-restore-page .card.bg-light {
+  background-color: #f8f9fa !important;
+}
+
+.backup-restore-page .list-unstyled {
+  padding-left: 0;
+  list-style: none;
+}
+
+.backup-restore-page .list-unstyled li {
+  padding: 0.25rem 0;
+}
+
+.backup-restore-page .text-success {
+  color: #198754 !important;
+}
+
+.backup-restore-page .text-danger {
+  color: #dc3545 !important;
+}
+
+.backup-restore-page .text-warning {
+  color: #ffc107 !important;
+}
+
+.backup-restore-page .spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+  border-width: 0.15em;
+}
+
+@media (max-width: 768px) {
+  .backup-restore-page .table-responsive {
+    font-size: 0.875rem;
+  }
+
+  .backup-restore-page .btn-group {
+    flex-direction: column;
+  }
+
+  .backup-restore-page .btn-group .btn {
+    border-radius: 0.25rem !important;
+    margin-bottom: 0.25rem;
+  }
+}
+

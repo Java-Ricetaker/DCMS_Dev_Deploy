@@ -36,6 +36,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\API\ClinicWeeklyScheduleController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Admin\SystemLogController;
+use App\Http\Controllers\Admin\BackupRestoreController;
 use App\Http\Controllers\Admin\PaymentRecordController;
 use App\Http\Controllers\Admin\QueuedEmailsController;
 use App\Http\Controllers\Admin\RefundRequestController;
@@ -196,6 +197,17 @@ Route::middleware(['auth:sanctum', 'check.account.status', AdminOnly::class])->g
         Route::get('/filter-options', [SystemLogController::class, 'filterOptions']);
         Route::get('/statistics', [SystemLogController::class, 'statistics']);
         Route::get('/{systemLog}', [SystemLogController::class, 'show']);
+    });
+
+    // Backup & Restore
+    Route::prefix('admin/backup-restore')->group(function () {
+        Route::get('/', [BackupRestoreController::class, 'index']);
+        Route::post('/create', [BackupRestoreController::class, 'create']);
+        Route::get('/download/{filename}', [BackupRestoreController::class, 'download']);
+        Route::post('/upload', [BackupRestoreController::class, 'upload']);
+        Route::post('/check-integrity', [BackupRestoreController::class, 'checkIntegrity']);
+        Route::post('/restore', [BackupRestoreController::class, 'restore']);
+        Route::delete('/{filename}', [BackupRestoreController::class, 'delete']);
     });
 
     // SMS testing

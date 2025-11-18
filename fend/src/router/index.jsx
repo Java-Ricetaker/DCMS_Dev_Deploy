@@ -36,6 +36,7 @@ import ClinicCalendarManager from "../pages/Admin/ClinicCalendarManager";
 import AdminMonthlyReport from "../pages/Admin/AdminMonthlyReport";
 import AdminGoalsPage from "../pages/Admin/AdminGoalsPage";
 import SystemLogsPage from "../pages/Admin/SystemLogsPage";
+import BackupRestorePage from "../pages/Admin/BackupRestorePage";
 import AdminAnalyticsDashboard from "../pages/Admin/AdminAnalyticsDashboard";
 import AdminDentistPerformance from "../pages/Admin/AdminDentistPerformance";
 import PatientManager from "../pages/Admin/PatientManager";
@@ -146,6 +147,8 @@ export default function AppRouter() {
           <Route path="patient-manager" element={<PatientManager />} />
           {/* Payment Records */}
           <Route path="payment-records" element={<PaymentRecords />} />
+          {/* Backup & Restore */}
+          <Route path="backup-restore" element={<BackupRestorePage />} />
           {/* System Logs */}
           <Route path="system-logs" element={<SystemLogsPage />} />
           {/* Time Block Utilization Dashboard */}

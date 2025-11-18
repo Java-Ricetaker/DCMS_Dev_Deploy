@@ -2050,6 +2050,7 @@ class ReportController extends Controller
             return [
                 'id' => (int) $item->id,
                 'name' => $item->name,
+                'service_name' => $item->name,
                 'price' => (float) $item->price,
                 'visits' => (int) $item->visits
             ];
