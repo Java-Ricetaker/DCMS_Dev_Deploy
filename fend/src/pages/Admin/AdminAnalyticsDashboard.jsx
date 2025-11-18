@@ -17,6 +17,7 @@ import {
   Filler,
 } from "chart.js";
 import { Line, Bar, Pie } from "react-chartjs-2";
+import PatientRetentionCard from "../../components/Admin/PatientRetentionCard";
 
 ChartJS.register(
   CategoryScale,
@@ -836,6 +837,22 @@ export default function AdminAnalyticsDashboard() {
       `Tip: Align stock/staffing; promote under-performers.`
     );
   }, [data]);
+
+  const sortedInsights = useMemo(() => {
+    if (!data?.insights) return [];
+    const priorityRank = { high: 0, medium: 1, low: 2 };
+    const fallbackRank = 3;
+    const getRank = (priority) =>
+      priorityRank[String(priority).toLowerCase()] ?? fallbackRank;
+
+    return data.insights
+      .map((insight, index) => ({ insight, index }))
+      .sort((a, b) => {
+        const diff = getRank(a.insight.priority) - getRank(b.insight.priority);
+        return diff !== 0 ? diff : a.index - b.index;
+      })
+      .map(({ insight }) => insight);
+  }, [data?.insights]);
 
   const pct = (v) =>
     typeof v === "number" ? `${v > 0 ? "+" : ""}${v.toFixed(2)}%` : "0%";
@@ -1967,7 +1984,7 @@ export default function AdminAnalyticsDashboard() {
                   </div>
                   <div className="card-body pt-0">
                     <div className="row g-3">
-                      {data.insights && data.insights.length > 0 ? data.insights.map((insight, idx) => (
+                      {sortedInsights.length > 0 ? sortedInsights.map((insight, idx) => (
                         <div key={idx} className="col-12 col-lg-6">
                           <div
                             className="card h-100 border-0"
@@ -2094,6 +2111,12 @@ export default function AdminAnalyticsDashboard() {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {data?.patient_retention_insights && (
+              <div className="mt-4">
+                <PatientRetentionCard insights={data.patient_retention_insights} />
               </div>
             )}
 

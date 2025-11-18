@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 
 class ReportController extends Controller
 {
@@ -558,9 +559,25 @@ class ReportController extends Controller
             Log::info('No actionable insights generated - insufficient data from last month');
         }
 
-        // Debug: Log the insights before returning
-        Log::info('Final insights count: ' . count($insights));
-        Log::info('Insights data: ' . json_encode($insights));
+        // Patient experience + dentist performance
+        $currentFeedbackWindow = $this->loadFeedbackWindow($start, $end);
+        $previousFeedbackWindow = $this->loadFeedbackWindow($prevStart, $prevEnd);
+        $patientRetentionInsights = $this->buildPatientRetentionInsights(
+            $currentFeedbackWindow,
+            $previousFeedbackWindow,
+            $start,
+            $end,
+            $prevStart,
+            $prevEnd
+        );
+        $dentistPerformanceInsights = $this->buildDentistPerformanceInsights($currentFeedbackWindow);
+
+        if (!empty($patientRetentionInsights)) {
+            $feedbackActionables = $this->buildPatientRetentionActionableInsights($patientRetentionInsights);
+            if (!empty($feedbackActionables)) {
+                $insights = array_merge($insights, $feedbackActionables);
+            }
+        }
 
         return response()->json([
             'month' => $start->format('Y-m'),
@@ -628,7 +645,277 @@ class ReportController extends Controller
             ],
             'alerts' => $alerts,
             'insights' => $insights,
+            'patient_retention_insights' => $patientRetentionInsights,
+            'dentist_performance_insights' => $dentistPerformanceInsights,
         ]);
+    }
+
+    private function loadFeedbackWindow(Carbon $start, Carbon $end): Collection
+    {
+        return DB::table('patient_feedbacks')
+            ->select([
+                'id',
+                'patient_visit_id',
+                'service_id',
+                'dentist_schedule_id',
+                'retention_responses',
+                'retention_score_avg',
+                'dentist_rating',
+                'dentist_issue_note',
+                DB::raw('COALESCE(submitted_at, created_at) as submitted_at'),
+            ])
+            ->whereBetween(DB::raw('COALESCE(submitted_at, created_at)'), [$start, $end])
+            ->get()
+            ->map(function ($row) {
+                $row->retention_responses = json_decode($row->retention_responses ?? '[]', true) ?? [];
+                $row->submitted_at = $row->submitted_at ? Carbon::parse($row->submitted_at) : null;
+                return $row;
+            });
+    }
+
+    private function buildPatientRetentionInsights(
+        Collection $currentFeedback,
+        Collection $previousFeedback,
+        Carbon $start,
+        Carbon $end,
+        Carbon $prevStart,
+        Carbon $prevEnd
+    ): array {
+        $questionLabels = config('patient_feedback.questions', []);
+
+        $currentQuestionStats = $this->computeQuestionStats($currentFeedback, $questionLabels);
+        $previousQuestionStats = $this->computeQuestionStats($previousFeedback, $questionLabels);
+
+        $currentOverall = $currentFeedback->whereNotNull('retention_score_avg')->avg('retention_score_avg');
+        $previousOverall = $previousFeedback->whereNotNull('retention_score_avg')->avg('retention_score_avg');
+
+        $currentVisitCount = DB::table('patient_visits')
+            ->where('status', 'completed')
+            ->whereBetween('visit_date', [$start->toDateString(), $end->toDateString()])
+            ->count();
+
+        $previousVisitCount = DB::table('patient_visits')
+            ->where('status', 'completed')
+            ->whereBetween('visit_date', [$prevStart->toDateString(), $prevEnd->toDateString()])
+            ->count();
+
+        $questions = collect($questionLabels)->map(function ($label, $key) use ($currentQuestionStats, $previousQuestionStats) {
+            $current = $currentQuestionStats[$key] ?? ['avg' => null, 'count' => 0];
+            $previous = $previousQuestionStats[$key] ?? ['avg' => null, 'count' => 0];
+
+            return [
+                'key' => $key,
+                'label' => $label,
+                'avg_score' => $current['avg'],
+                'avg_score_prev' => $previous['avg'],
+                'change' => $this->diff($current['avg'], $previous['avg']),
+                'responses' => $current['count'],
+            ];
+        })->values();
+
+        return [
+            'period' => [
+                'start' => $start->toDateString(),
+                'end' => $end->toDateString(),
+            ],
+            'responses_count' => $currentFeedback->count(),
+            'responses_count_prev' => $previousFeedback->count(),
+            'completion_rate' => $this->percentage($currentFeedback->count(), $currentVisitCount),
+            'completion_rate_prev' => $this->percentage($previousFeedback->count(), $previousVisitCount),
+            'completion_rate_change' => $this->diff(
+                $this->percentage($currentFeedback->count(), $currentVisitCount),
+                $this->percentage($previousFeedback->count(), $previousVisitCount)
+            ),
+            'overall_score' => $currentOverall !== null ? round($currentOverall, 2) : null,
+            'overall_score_prev' => $previousOverall !== null ? round($previousOverall, 2) : null,
+            'overall_score_change' => $this->diff(
+                $currentOverall !== null ? round($currentOverall, 2) : null,
+                $previousOverall !== null ? round($previousOverall, 2) : null
+            ),
+            'questions' => $questions,
+        ];
+    }
+
+    private function computeQuestionStats(Collection $feedback, array $questionLabels): array
+    {
+        $stats = [];
+        foreach ($questionLabels as $key => $label) {
+            $stats[$key] = ['sum' => 0, 'count' => 0, 'avg' => null];
+        }
+
+        foreach ($feedback as $row) {
+            foreach ($questionLabels as $key => $label) {
+                $value = $row->retention_responses[$key] ?? null;
+                if (is_numeric($value)) {
+                    $stats[$key]['sum'] += (float) $value;
+                    $stats[$key]['count']++;
+                }
+            }
+        }
+
+        foreach ($stats as $key => &$stat) {
+            if ($stat['count'] > 0) {
+                $stat['avg'] = round($stat['sum'] / $stat['count'], 2);
+            }
+        }
+
+        return $stats;
+    }
+
+    private function buildDentistPerformanceInsights(Collection $feedback): array
+    {
+        if ($feedback->isEmpty()) {
+            return [
+                'overall_avg_rating' => null,
+                'responses_count' => 0,
+                'issue_count' => 0,
+                'dentists' => [],
+            ];
+        }
+
+        $grouped = $feedback->groupBy('dentist_schedule_id');
+        $dentistIds = $grouped->keys()->filter()->all();
+
+        $dentistNames = empty($dentistIds)
+            ? collect()
+            : DB::table('dentist_schedules')
+                ->whereIn('id', $dentistIds)
+                ->pluck('dentist_name', 'id');
+
+        $rows = $grouped->map(function ($entries, $dentistId) use ($dentistNames) {
+            $count = $entries->count();
+            $avgRating = $entries->whereNotNull('dentist_rating')->avg('dentist_rating');
+            $issueCount = $entries->filter(function ($row) {
+                return filled($row->dentist_issue_note);
+            })->count();
+            $lowRatings = $entries->filter(function ($row) {
+                return is_numeric($row->dentist_rating) && $row->dentist_rating <= 2;
+            })->count();
+
+            $lastFeedback = $entries->sortByDesc(function ($row) {
+                return $row->submitted_at ? $row->submitted_at->timestamp : null;
+            })->first();
+
+            return [
+                'dentist_schedule_id' => $dentistId,
+                'dentist_name' => $dentistId
+                    ? ($dentistNames[$dentistId] ?? "Dentist #{$dentistId}")
+                    : 'Unassigned',
+                'avg_rating' => $avgRating !== null ? round($avgRating, 2) : null,
+                'responses' => $count,
+                'issue_count' => $issueCount,
+                'issue_rate' => $this->percentage($issueCount, $count),
+                'low_rating_count' => $lowRatings,
+                'last_feedback_at' => $lastFeedback && $lastFeedback->submitted_at
+                    ? $lastFeedback->submitted_at->toIso8601String()
+                    : null,
+            ];
+        })->values()->sortBy('avg_rating')->values();
+
+        $overallIssueCount = $feedback->filter(fn ($row) => filled($row->dentist_issue_note))->count();
+
+        $overallRating = $feedback->whereNotNull('dentist_rating')->avg('dentist_rating');
+
+        return [
+            'overall_avg_rating' => $overallRating !== null ? round($overallRating, 2) : null,
+            'responses_count' => $feedback->count(),
+            'issue_count' => $overallIssueCount,
+            'issue_rate' => $this->percentage($overallIssueCount, $feedback->count()),
+            'dentists' => $rows,
+        ];
+    }
+
+    private function buildPatientRetentionActionableInsights(array $retentionInsights): array
+    {
+        $insights = [];
+        $responses = $retentionInsights['responses_count'] ?? 0;
+        if ($responses <= 0) {
+            return $insights;
+        }
+
+        $overall = $retentionInsights['overall_score'] ?? null;
+        $completion = $retentionInsights['completion_rate'] ?? null;
+        $questions = collect($retentionInsights['questions'] ?? []);
+
+        $lowestQuestion = $questions
+            ->filter(fn ($question) => isset($question['avg_score']))
+            ->sortBy('avg_score')
+            ->first();
+
+        if ($overall !== null && $overall < 4.0) {
+            $lowestLabel = $lowestQuestion['label'] ?? 'the lowest-scoring statement';
+            $lowestScore = isset($lowestQuestion['avg_score'])
+                ? number_format((float) $lowestQuestion['avg_score'], 2)
+                : 'N/A';
+
+            $insights[] = [
+                'category' => 'patient_retention',
+                'priority' => 'high',
+                'title' => 'Patient Retention card shows low satisfaction',
+                'description' => 'Average score on the Patient Retention card is '
+                    . number_format((float) $overall, 2)
+                    . ' (target ≥ 4.30). Focus on the weakest survey prompts surfaced in the card.',
+                'actions' => array_filter([
+                    "Open the Patient Retention card under Analytics → review question-level sentiment and comments. Pay special attention to \"{$lowestLabel}\" (avg {$lowestScore}).",
+                    'Schedule a quick interview with patients who rated 3 or below to understand their expectations and draft the next steps.',
+                    'Use the Patient Retention card to track improvements weekly and celebrate when scores rebound above 4.3.',
+                    'Review dentist issue notes captured in feedback and close the loop with affected patients within 48 hours.',
+                ]),
+                'impact' => 'High - Direct impact on loyalty and rebooking',
+            ];
+        } elseif ($overall !== null && $overall >= 4.5) {
+            $insights[] = [
+                'category' => 'patient_retention',
+                'priority' => 'low',
+                'title' => 'Patient Retention card confirms excellent experience',
+                'description' => 'Average satisfaction remains at '
+                    . number_format((float) $overall, 2)
+                    . '. Maintain the habits highlighted in the Patient Retention card to keep loyalty high.',
+                'actions' => [
+                    'Document best practices from high-performing days/teams and share clinic-wide.',
+                    'Launch a referral incentive while satisfaction momentum is strong.',
+                    'Continue monitoring the Patient Retention card monthly to catch dips early.',
+                ],
+                'impact' => 'Low - Maintain excellence',
+            ];
+        }
+
+        if ($completion !== null && $completion < 40) {
+            $insights[] = [
+                'category' => 'patient_retention',
+                'priority' => 'medium',
+                'title' => 'Need more Patient Retention responses',
+                'description' => 'Only '
+                    . number_format((float) $completion, 2)
+                    . '% of completed visits submit the Patient Retention survey. More responses will make the card actionable.',
+                'actions' => [
+                    'Enable in-clinic prompts (tablet or QR code) so front desk invites every departing patient to rate the visit.',
+                    'Trigger automated reminders within 24 hours of visit completion for patients with portal access.',
+                    'Coach staff to explain why the Patient Retention card matters and aim for ≥60% response rate.',
+                ],
+                'impact' => 'Medium - Data quality & signal strength',
+            ];
+        }
+
+        return $insights;
+    }
+
+    private function percentage(int $part, int $whole): float
+    {
+        if ($whole <= 0 || $part <= 0) {
+            return 0.0;
+        }
+
+        return round(($part / $whole) * 100, 2);
+    }
+
+    private function diff(?float $current, ?float $previous): ?float
+    {
+        if ($current === null || $previous === null) {
+            return null;
+        }
+
+        return round($current - $previous, 2);
     }
 
     public function analyticsComparison(Request $request)

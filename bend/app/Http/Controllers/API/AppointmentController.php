@@ -27,6 +27,7 @@ use App\Models\PatientManager;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Support\PatientFeedbackRules;
 
 class AppointmentController extends Controller
 {
@@ -457,6 +458,7 @@ class AppointmentController extends Controller
                 'assignedDentist',
                 'visitNotes.createdBy',
                 'additionalCharges.inventoryItem',
+                'feedback',
             ])
             ->where('patient_id', $user->patient->id)
             ->where('status', 'completed');
@@ -476,6 +478,9 @@ class AppointmentController extends Controller
 
         // Transform the data to include service name and teeth treated
         $transformedVisits = $visits->getCollection()->map(function ($visit) {
+            $feedback = $visit->feedback;
+            $eligibility = PatientFeedbackRules::visitEligibility($visit, (bool) $feedback);
+
             return [
                 'id' => $visit->id,
                 'visit_date' => $visit->visit_date->format('Y-m-d'),
@@ -492,6 +497,21 @@ class AppointmentController extends Controller
                 'dentist_name' => $visit->assignedDentist?->dentist_name
                     ?? $visit->visitNotes?->createdBy?->name
                     ?? null,
+                'feedback' => $feedback ? [
+                    'id' => $feedback->id,
+                    'dentist_rating' => $feedback->dentist_rating,
+                    'retention_score_avg' => $feedback->retention_score_avg,
+                    'submitted_at' => optional($feedback->submitted_at)->toIso8601String(),
+                    'editable_until' => optional($feedback->editable_until)->toIso8601String(),
+                    'locked_at' => optional($feedback->locked_at)->toIso8601String(),
+                    'is_editable' => $feedback->isEditable(),
+                ] : null,
+                'feedback_status' => [
+                    'can_rate' => $eligibility['can_rate'],
+                    'reason' => $eligibility['reason'],
+                    'rating_window_expires_at' => optional($eligibility['deadline'])->toIso8601String(),
+                    'can_edit' => $feedback ? $feedback->isEditable() : false,
+                ],
             ];
         });
 

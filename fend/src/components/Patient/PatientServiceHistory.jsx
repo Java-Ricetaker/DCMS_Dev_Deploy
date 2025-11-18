@@ -3,6 +3,7 @@ import api from "../../api/api";
 import teethChartImage from "../../pages/Dentist/Teeth_Chart.png";
 import primaryTeethChartImage from "../../pages/Dentist/Primary_Teeth_Chart.png";
 import toast from "react-hot-toast";
+import VisitRatingModal from "./VisitRatingModal";
 
 const PatientServiceHistory = () => {
   const [visits, setVisits] = useState([]);
@@ -14,6 +15,11 @@ const PatientServiceHistory = () => {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   const [downloadingReceipt, setDownloadingReceipt] = useState(null);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [ratingModalVisit, setRatingModalVisit] = useState(null);
+  const [ratingModalData, setRatingModalData] = useState(null);
+  const [ratingModalMode, setRatingModalMode] = useState("create");
+  const [ratingModalLoading, setRatingModalLoading] = useState(false);
   
   // Date filter states for service history
   const [startDate, setStartDate] = useState("");
@@ -139,6 +145,105 @@ const PatientServiceHistory = () => {
     } finally {
       setDownloadingReceipt(null);
     }
+  };
+
+  const closeRatingModal = () => {
+    setRatingModalVisible(false);
+    setRatingModalVisit(null);
+    setRatingModalData(null);
+    setRatingModalMode("create");
+    setRatingModalLoading(false);
+  };
+
+  const handleRatingSaved = async () => {
+    await fetchVisitHistory(currentPage);
+    closeRatingModal();
+  };
+
+  const openRatingModal = async (visit, mode = "create") => {
+    if (!visit) return;
+    setRatingModalVisit(visit);
+    setRatingModalMode(mode);
+    setRatingModalVisible(true);
+    setRatingModalLoading(true);
+    setRatingModalData(null);
+    try {
+      const { data } = await api.get(`/api/patient-feedback/visit/${visit.id}`);
+      setRatingModalData(data);
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        "Unable to load the feedback form for this visit.";
+      toast.error(message);
+      closeRatingModal();
+    } finally {
+      setRatingModalLoading(false);
+    }
+  };
+
+  const feedbackReasonMessage = (reason) => {
+    const map = {
+      visit_not_completed: "Visit not completed yet",
+      feedback_exists: "Feedback already submitted",
+      window_elapsed: "Cannot rate (more than 7 days ago)",
+    };
+    return map[reason] || "Not eligible to rate";
+  };
+
+  const renderFeedbackAction = (visit) => {
+    const feedback = visit.feedback;
+    const status = visit.feedback_status || {};
+    const hasFeedback = !!feedback;
+    const canRate = !!status.can_rate;
+    const canEdit = !!status.can_edit;
+
+    if (hasFeedback) {
+      return (
+        <div className="d-flex flex-column gap-1">
+          <button
+            className={`btn btn-sm ${
+              canEdit ? "btn-outline-primary" : "btn-outline-secondary"
+            }`}
+            onClick={() => openRatingModal(visit, canEdit ? "edit" : "view")}
+          >
+            {canEdit ? (
+              <>
+                <i className="bi bi-pencil-square me-1"></i>
+                Edit rating
+              </>
+            ) : (
+              <>
+                <i className="bi bi-eye me-1"></i>
+                See rating
+              </>
+            )}
+          </button>
+          {!canEdit && feedback?.locked_at && (
+            <small className="text-muted">
+              Locked {new Date(feedback.locked_at).toLocaleDateString()}
+            </small>
+          )}
+        </div>
+      );
+    }
+
+    if (canRate) {
+      return (
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => openRatingModal(visit, "create")}
+        >
+          <i className="bi bi-star me-1"></i>
+          Rate visit
+        </button>
+      );
+    }
+
+    return (
+      <span className="badge bg-light text-muted text-wrap">
+        {feedbackReasonMessage(status.reason)}
+      </span>
+    );
   };
 
   return (
@@ -443,6 +548,7 @@ const PatientServiceHistory = () => {
                 <th>Dentist</th>
                 <th>Notes</th>
                 <th>Receipt</th>
+                <th>Feedback</th>
               </tr>
             </thead>
             <tbody>
@@ -531,6 +637,7 @@ const PatientServiceHistory = () => {
                         )}
                       </button>
                     </td>
+                  <td>{renderFeedbackAction(visit)}</td>
                   </tr>
                 ))
               )}
@@ -567,6 +674,15 @@ const PatientServiceHistory = () => {
           </div>
         </div>
       )}
+      <VisitRatingModal
+        show={ratingModalVisible}
+        visit={ratingModalVisit}
+        modalData={ratingModalData}
+        mode={ratingModalMode}
+        loading={ratingModalLoading}
+        onClose={closeRatingModal}
+        onSaved={handleRatingSaved}
+      />
       {showNotesModal && (
         <div
           className="modal show d-block"

@@ -67,6 +67,11 @@ class Service extends Model
         return $this->hasMany(ServiceBundleItem::class, 'parent_service_id');
     }
 
+    public function patientFeedback()
+    {
+        return $this->hasMany(PatientFeedback::class);
+    }
+
     public function bundledServices()
     {
         return $this->belongsToMany(Service::class, 'service_bundle_items', 'parent_service_id', 'child_service_id');

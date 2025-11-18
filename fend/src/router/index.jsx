@@ -37,6 +37,7 @@ import AdminMonthlyReport from "../pages/Admin/AdminMonthlyReport";
 import AdminGoalsPage from "../pages/Admin/AdminGoalsPage";
 import SystemLogsPage from "../pages/Admin/SystemLogsPage";
 import AdminAnalyticsDashboard from "../pages/Admin/AdminAnalyticsDashboard";
+import AdminDentistPerformance from "../pages/Admin/AdminDentistPerformance";
 import PatientManager from "../pages/Admin/PatientManager";
 import TimeBlockUtilizationDashboard from "../pages/Admin/TimeBlockUtilizationDashboard";
 import PaymentRecords from "../pages/Admin/PaymentRecords";
@@ -129,6 +130,7 @@ export default function AppRouter() {
               </Suspense>
             }
           />
+          <Route path="dentist-performance" element={<AdminDentistPerformance />} />
           <Route
             path="inventory"
             element={

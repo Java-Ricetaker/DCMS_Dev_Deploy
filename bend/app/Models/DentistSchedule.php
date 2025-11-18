@@ -98,4 +98,9 @@ class DentistSchedule extends Model
             ->pluck(DB::raw("COALESCE(dentist_code, dentist_name)"))
             ->all();
     }
+
+    public function patientFeedback()
+    {
+        return $this->hasMany(PatientFeedback::class);
+    }
 }

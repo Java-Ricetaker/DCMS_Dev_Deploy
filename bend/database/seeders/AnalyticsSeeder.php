@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\PatientMedicalHistory;
 use App\Models\PatientVisit;
+use App\Models\PatientFeedback;
 use App\Models\Payment;
 use App\Models\PerformanceGoal;
 use App\Models\GoalProgressSnapshot;
@@ -25,6 +26,7 @@ use Database\Seeders\Support\RealisticVisitFactory;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Database\Seeders\PatientFeedbackSeeder;
 
 class AnalyticsSeeder extends Seeder
 {
@@ -72,8 +74,9 @@ class AnalyticsSeeder extends Seeder
 
         $current = $startDate->copy();
         while ($current->lte($endDate)) {
-            $this->generateMonthData($current, $patients, $services, $visitFactory);
-            $this->generateInventoryLoss($current, $adminUser);
+            $monthPointer = $current->copy();
+            $this->generateMonthData($monthPointer, $patients, $services, $visitFactory);
+            $this->generateInventoryLoss($monthPointer, $adminUser);
             $current->addMonth();
         }
 
@@ -90,6 +93,7 @@ class AnalyticsSeeder extends Seeder
         
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
         VisitAdditionalCharge::truncate();
+        DB::table('patient_feedbacks')->truncate();
         InventoryMovement::truncate();
         InventoryBatch::truncate();
         InventoryItem::truncate();
@@ -365,6 +369,7 @@ class AnalyticsSeeder extends Seeder
 
                 $createdToday++;
                 $visitCount++;
+                PatientFeedbackSeeder::seedForVisit($result['visit']);
                 if ($result['appointment']) {
                     $appointmentCount++;
                 }
@@ -428,7 +433,7 @@ class AnalyticsSeeder extends Seeder
                     'updated_at' => now(),
                 ]);
             }
-            
+
             $current->addMonth();
         }
     }

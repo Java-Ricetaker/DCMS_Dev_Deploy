@@ -60,6 +60,11 @@ class Patient extends Model
         return $this->belongsTo(PolicyHistory::class, 'policy_history_id');
     }
 
+    public function feedbackResponses()
+    {
+        return $this->hasMany(PatientFeedback::class);
+    }
+
     public function appointments()
     {
         return $this->hasMany(Appointment::class);

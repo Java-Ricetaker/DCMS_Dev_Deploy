@@ -111,6 +111,14 @@ function AdminLayout() {
               <span className="label">Dentists</span>
             </NavLink>
           </li>
+          <li className="nav-item">
+            <NavLink to="/admin/dentist-performance" className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}>
+              <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 17h2v-7H3v7zm4 0h2V7H7v10zm4 0h2v-4h-2v4zm4 0h2V4h-2v13zm4 0h2v-9h-2v9z"/>
+              </svg>
+              <span className="label">Dentist Performance</span>
+            </NavLink>
+          </li>
 
           <li className="nav-item">
             <NavLink to="/admin/schedule" className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}>

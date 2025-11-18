@@ -83,6 +83,11 @@ class PatientVisit extends Model
         return $this->hasOne(VisitNote::class);
     }
 
+    public function feedback()
+    {
+        return $this->hasOne(PatientFeedback::class, 'patient_visit_id');
+    }
+
     public function appointment()
     {
         return $this->belongsTo(Appointment::class);

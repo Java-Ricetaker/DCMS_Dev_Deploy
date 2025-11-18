@@ -48,6 +48,7 @@ use App\Http\Controllers\API\ReceiptController;
 use App\Http\Middleware\DentistAuthMiddleware;
 use App\Http\Middleware\DentistPasswordChangeMiddleware;
 use App\Http\Controllers\API\PolicyConsentController;
+use App\Http\Controllers\API\PatientFeedbackController;
 
 // ------------------------
 // Public auth routes
@@ -207,6 +208,7 @@ Route::middleware(['auth:sanctum', 'check.account.status', AdminOnly::class])->g
     Route::get('/analytics/trend', [ReportController::class, 'analyticsTrend']);
     Route::get('/analytics/promotion-opportunities', [ReportController::class, 'promotionOpportunities']);
     Route::get('/analytics/test-insights', [ReportController::class, 'testInsights']);
+    Route::get('/admin/dentists/{dentist}/feedback', [PatientFeedbackController::class, 'dentistFeedback']);
 
     // Performance goals
     Route::prefix('goals')->group(function () {
@@ -326,6 +328,12 @@ Route::middleware(['auth:sanctum', 'check.account.status'])->group(function () {
         // Patient's own appointments
         Route::get('/user-appointments', [AppointmentController::class, 'userAppointments']);
         Route::get('/user-visit-history', [AppointmentController::class, 'userVisitHistory']);
+        Route::prefix('patient-feedback')->group(function () {
+            Route::get('/', [PatientFeedbackController::class, 'index']);
+            Route::get('/visit/{visit}', [PatientFeedbackController::class, 'showByVisit'])->whereNumber('visit');
+            Route::post('/', [PatientFeedbackController::class, 'store']);
+            Route::put('/{feedback}', [PatientFeedbackController::class, 'update'])->whereNumber('feedback');
+        });
         Route::prefix('refunds')->group(function () {
             Route::get('/pending-claims', [\App\Http\Controllers\API\PatientRefundController::class, 'pendingClaims']);
             Route::post('/{id}/confirm', [\App\Http\Controllers\API\PatientRefundController::class, 'confirm']);
