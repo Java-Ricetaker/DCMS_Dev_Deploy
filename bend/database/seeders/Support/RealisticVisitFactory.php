@@ -8,6 +8,7 @@ use App\Models\PatientMedicalHistory;
 use App\Models\PatientVisit;
 use App\Models\Payment;
 use App\Models\Service;
+use App\Models\DentistSchedule;
 use App\Models\User;
 use App\Models\VisitNote;
 use Carbon\Carbon;
@@ -18,6 +19,7 @@ use Illuminate\Support\Str;
 class RealisticVisitFactory
 {
     private ?\Faker\Generator $faker = null;
+    private array $dentistUserCache = [];
 
     public function __construct(private readonly User $adminUser)
     {
@@ -161,6 +163,38 @@ class RealisticVisitFactory
         ];
     }
 
+    private function resolveDentistUserId(?int $dentistScheduleId): ?int
+    {
+        if (!$dentistScheduleId) {
+            return null;
+        }
+
+        if (array_key_exists($dentistScheduleId, $this->dentistUserCache)) {
+            return $this->dentistUserCache[$dentistScheduleId];
+        }
+
+        $schedule = DentistSchedule::find($dentistScheduleId);
+        if (!$schedule) {
+            return $this->dentistUserCache[$dentistScheduleId] = null;
+        }
+
+        $user = null;
+
+        if ($schedule->email) {
+            $user = User::where('role', 'dentist')
+                ->where('email', $schedule->email)
+                ->first();
+        }
+
+        if (!$user) {
+            $user = User::where('role', 'dentist')
+                ->where('name', $schedule->dentist_name)
+                ->first();
+        }
+
+        return $this->dentistUserCache[$dentistScheduleId] = $user?->id;
+    }
+
     private function determineDuration(Service $service, string $status): int
     {
         if ($status === 'pending') {
@@ -282,14 +316,16 @@ class RealisticVisitFactory
             ],
         };
 
+        $dentistUserId = $this->resolveDentistUserId($visit->dentist_schedule_id);
+
         VisitNote::create([
             'patient_visit_id' => $visit->id,
             'dentist_notes_encrypted' => $notes['dentist_notes'],
             'findings_encrypted' => $notes['findings'],
             'treatment_plan_encrypted' => $notes['plan'],
             'teeth_treated' => null,
-            'created_by' => $this->adminUser->id,
-            'updated_by' => $this->adminUser->id,
+            'created_by' => $dentistUserId,
+            'updated_by' => $dentistUserId,
             'last_accessed_at' => null,
             'last_accessed_by' => null,
         ]);

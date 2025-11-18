@@ -377,7 +377,7 @@ class PerformanceGoalTestSeeder extends Seeder
     private function createVisitNote(PatientVisit $visit, array $visitData): void
     {
         // Get a random dentist user for the notes
-        $dentist = User::where('role', 'staff')->inRandomOrder()->first();
+        $dentist = User::where('role', 'dentist')->inRandomOrder()->first();
         
         if (!$dentist) {
             return; // Skip if no dentist available

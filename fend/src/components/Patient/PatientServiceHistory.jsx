@@ -440,6 +440,7 @@ const PatientServiceHistory = () => {
                 <th>Date</th>
                 <th>Service</th>
                 <th>Teeth Done</th>
+                <th>Dentist</th>
                 <th>Notes</th>
                 <th>Receipt</th>
               </tr>
@@ -447,7 +448,7 @@ const PatientServiceHistory = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="4" className="text-center py-5">
+                  <td colSpan="6" className="text-center py-5">
                     <div className="spinner-border text-primary" role="status">
                       <span className="visually-hidden">Loading...</span>
                     </div>
@@ -456,7 +457,7 @@ const PatientServiceHistory = () => {
                 </tr>
               ) : visits.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="text-center py-5">
+                  <td colSpan="6" className="text-center py-5">
                     <i className="bi bi-calendar-x display-4 text-muted"></i>
                     <h6 className="mt-3 text-muted">No completed visits yet</h6>
                     <p className="text-muted mb-0">Your completed dental visits will appear here.</p>
@@ -491,6 +492,13 @@ const PatientServiceHistory = () => {
                             {getTeethCount(visit.teeth_treated)} tooth{getTeethCount(visit.teeth_treated) !== 1 ? 's' : ''}
                           </small>
                         </div>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {visit.dentist_name ? (
+                        <div className="fw-semibold">{visit.dentist_name}</div>
                       ) : (
                         <span className="text-muted">—</span>
                       )}

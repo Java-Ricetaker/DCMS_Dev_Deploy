@@ -452,7 +452,12 @@ class AppointmentController extends Controller
         }
 
         // Get completed patient visits with visit notes
-        $query = \App\Models\PatientVisit::with(['service', 'visitNotes', 'additionalCharges.inventoryItem'])
+        $query = \App\Models\PatientVisit::with([
+                'service',
+                'assignedDentist',
+                'visitNotes.createdBy',
+                'additionalCharges.inventoryItem',
+            ])
             ->where('patient_id', $user->patient->id)
             ->where('status', 'completed');
 
@@ -484,6 +489,9 @@ class AppointmentController extends Controller
                 'findings' => $visit->visitNotes?->findings ?? '',
                 'treatment_plan' => $visit->visitNotes?->treatment_plan ?? '',
                 'receipt_available' => $visit->status === 'completed',
+                'dentist_name' => $visit->assignedDentist?->dentist_name
+                    ?? $visit->visitNotes?->createdBy?->name
+                    ?? null,
             ];
         });
 
