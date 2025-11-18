@@ -23,6 +23,17 @@ const WEEKDAYS = [
   { key: "sat", label: "Sat" },
 ];
 
+// Map weekday keys to weekday numbers (0=Sunday, 6=Saturday)
+const WEEKDAY_KEY_TO_NUMBER = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
 export default function DentistScheduleManager() {
   const emptyForm = {
     id: null,
@@ -51,8 +62,12 @@ export default function DentistScheduleManager() {
   const [selectedDentist, setSelectedDentist] = useState(null);
   const [accountForm, setAccountForm] = useState({ email: "", name: "" });
   const [accountLoading, setAccountLoading] = useState(false);
+  const [weeklySchedule, setWeeklySchedule] = useState([]);
 
-  useEffect(() => { fetchRows(); }, []);
+  useEffect(() => { 
+    fetchRows();
+    fetchWeeklySchedule();
+  }, []);
 
   const fetchRows = async () => {
     try {
@@ -64,6 +79,15 @@ export default function DentistScheduleManager() {
       toast.error("Failed to load dentists. Check admin auth and routes.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchWeeklySchedule = async () => {
+    try {
+      const res = await api.get("/api/weekly-schedule");
+      setWeeklySchedule(res.data);
+    } catch (err) {
+      console.error("Failed to load weekly schedule", err);
     }
   };
 
@@ -245,9 +269,52 @@ export default function DentistScheduleManager() {
 
   // Email verification no longer needed for dentists
 
-  const DayBadge = ({ on, label }) => (
+  // Create a mapping from weekday number to schedule data for quick lookup
+  const scheduleByWeekday = useMemo(() => {
+    const map = {};
+    weeklySchedule.forEach(schedule => {
+      map[schedule.weekday] = schedule;
+    });
+    return map;
+  }, [weeklySchedule]);
+
+  // Format time from HH:mm to 12-hour format with AM/PM
+  const formatTime = (timeString) => {
+    if (!timeString) return "";
+    // Remove seconds if present (format: HH:mm or HH:mm:ss)
+    const timeParts = timeString.split(':');
+    if (timeParts.length < 2) return timeString;
+    
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = timeParts[1];
+    
+    if (isNaN(hours)) return timeString;
+    
+    // Convert to 12-hour format
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    
+    return `${hours12}:${minutes} ${period}`;
+  };
+
+  // Get working hours for a weekday key
+  const getWorkingHours = (weekdayKey) => {
+    const weekdayNum = WEEKDAY_KEY_TO_NUMBER[weekdayKey];
+    const schedule = scheduleByWeekday[weekdayNum];
+    if (schedule && schedule.is_open && schedule.open_time && schedule.close_time) {
+      return `${formatTime(schedule.open_time)} - ${formatTime(schedule.close_time)}`;
+    }
+    return null;
+  };
+
+  const DayBadge = ({ on, label, hours }) => (
     <span className={`badge ${on ? "bg-success" : "bg-light text-muted"}`} style={{ fontSize: '0.7rem' }}>
       {label}
+      {on && hours && (
+        <span className="ms-1" style={{ fontSize: '0.65rem', opacity: 0.9 }}>
+          ({hours})
+        </span>
+      )}
     </span>
   );
 
@@ -376,9 +443,17 @@ export default function DentistScheduleManager() {
                       </td>
                       <td>
                         <div className="d-flex flex-wrap gap-1">
-                          {WEEKDAYS.map((d) => (
-                            <DayBadge key={d.key} on={!!r[d.key]} label={d.label} />
-                          ))}
+                          {WEEKDAYS.map((d) => {
+                            const hours = getWorkingHours(d.key);
+                            return (
+                              <DayBadge 
+                                key={d.key} 
+                                on={!!r[d.key]} 
+                                label={d.label}
+                                hours={hours}
+                              />
+                            );
+                          })}
                         </div>
                       </td>
                       <td>{r.contract_end_date || <span className="text-muted">—</span>}</td>

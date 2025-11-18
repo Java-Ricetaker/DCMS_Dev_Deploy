@@ -378,5 +378,119 @@ class SmsDuplicatePreventionTest extends TestCase
         // But the key is that reminded_at should be set
         $this->assertNotNull($this->appointment->reminded_at);
     }
+
+    /** @test */
+    public function only_first_sms_sent_when_default_and_modified_messages_requested(): void
+    {
+        Sanctum::actingAs($this->staff);
+
+        // Get patient name for default message format
+        $patientName = $this->patientUser->name ?? 'Patient';
+        $defaultMessage = "Hello {$patientName}, this is a reminder for your dental appointment on {$this->appointment->date} at {$this->appointment->time_slot} for {$this->service->name}. Ref: {$this->appointment->reference_code}. Please arrive on time. – Kreative Dental Clinic";
+        $modifiedMessage = "Custom reminder: Your appointment is tomorrow at {$this->appointment->time_slot}. Please confirm attendance.";
+
+        // Scenario 1: Default message sent first, then modified message
+        // Reset appointment for this test
+        $this->appointment->update(['reminded_at' => null]);
+        $this->appointment->refresh();
+
+        // First request with default message
+        $firstResponse = $this->withHeaders([
+            'User-Agent' => 'Symfony',
+        ])->postJson("/api/appointments/{$this->appointment->id}/send-reminder", [
+            'message' => $defaultMessage,
+            'edited' => false,
+        ]);
+
+        $firstResponse->assertStatus(200);
+        $firstResponse->assertJson(['message' => 'Reminder sent.']);
+
+        // Verify reminded_at was set
+        $this->appointment->refresh();
+        $this->assertNotNull($this->appointment->reminded_at);
+
+        // Second request with modified message - should fail
+        $secondResponse = $this->withHeaders([
+            'User-Agent' => 'Symfony',
+        ])->postJson("/api/appointments/{$this->appointment->id}/send-reminder", [
+            'message' => $modifiedMessage,
+            'edited' => true,
+        ]);
+
+        $secondResponse->assertStatus(422);
+        $secondResponse->assertJson(['message' => 'Not eligible for reminder.']);
+
+        // Verify only one notification log was created (the first one with default message)
+        $logs = NotificationLog::where('to', '+639123456789')
+            ->where('channel', 'sms')
+            ->get();
+        
+        $this->assertEquals(1, $logs->count(), 'Only one SMS should be logged');
+        $this->assertEquals($defaultMessage, $logs->first()->message, 'The first (default) message should be the one that was sent');
+        $this->assertEquals('blocked_sandbox', $logs->first()->status, 'SMS should be blocked in test environment (no actual SMS sent)');
+
+        // Scenario 2: Modified message sent first, then default message
+        // Create a new appointment for this scenario
+        $appointment2 = Appointment::factory()->approved()->create([
+            'patient_id' => $this->patient->id,
+            'service_id' => $this->service->id,
+            'date' => now()->addDays(1)->toDateString(),
+            'time_slot' => '14:00-15:00',
+            'status' => 'approved',
+            'reminded_at' => null,
+            'reference_code' => 'TEST5678',
+        ]);
+
+        // First request with modified message
+        $firstResponse2 = $this->withHeaders([
+            'User-Agent' => 'Symfony',
+        ])->postJson("/api/appointments/{$appointment2->id}/send-reminder", [
+            'message' => $modifiedMessage,
+            'edited' => true,
+        ]);
+
+        $firstResponse2->assertStatus(200);
+        $firstResponse2->assertJson(['message' => 'Reminder sent.']);
+
+        // Verify reminded_at was set
+        $appointment2->refresh();
+        $this->assertNotNull($appointment2->reminded_at);
+
+        // Second request with default message - should fail
+        $secondResponse2 = $this->withHeaders([
+            'User-Agent' => 'Symfony',
+        ])->postJson("/api/appointments/{$appointment2->id}/send-reminder", [
+            'message' => $defaultMessage,
+            'edited' => false,
+        ]);
+
+        $secondResponse2->assertStatus(422);
+        $secondResponse2->assertJson(['message' => 'Not eligible for reminder.']);
+
+        // Verify only one notification log was created for this appointment (the first one with modified message)
+        $logs2 = NotificationLog::where('to', '+639123456789')
+            ->where('channel', 'sms')
+            ->where('message', $modifiedMessage)
+            ->get();
+        
+        $this->assertGreaterThanOrEqual(1, $logs2->count(), 'The modified message should be logged');
+        $this->assertEquals('blocked_sandbox', $logs2->first()->status, 'SMS should be blocked in test environment (no actual SMS sent)');
+        
+        // Total logs should be 2 (one from each scenario)
+        $totalLogs = NotificationLog::where('to', '+639123456789')
+            ->where('channel', 'sms')
+            ->count();
+        
+        $this->assertEquals(2, $totalLogs, 'Total of 2 SMS logs (one from each scenario)');
+        
+        // Verify all logs are blocked (no actual SMS sent)
+        $allLogs = NotificationLog::where('to', '+639123456789')
+            ->where('channel', 'sms')
+            ->get();
+        
+        foreach ($allLogs as $log) {
+            $this->assertEquals('blocked_sandbox', $log->status, 'All SMS should be blocked in test environment (no actual SMS sent)');
+        }
+    }
 }
 
