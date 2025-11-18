@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import api from "../../api/api";
 
 function TimeBlockUtilizationDashboard() {
@@ -87,20 +87,34 @@ function TimeBlockUtilizationDashboard() {
     if (utilization <= 75) return 'High';
     return 'Very High';
   };
+  
+  const dayDataByDate = useMemo(() => {
+    return timeBlockData.reduce((acc, day) => {
+      acc[day.date] = day;
+      return acc;
+    }, {});
+  }, [timeBlockData]);
 
-  // Generate time slots (30-minute intervals from 8:00 AM to 5:00 PM)
-  const generateTimeSlots = () => {
-    const slots = [];
-    for (let hour = 8; hour < 17; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        slots.push(timeStr);
-      }
-    }
-    return slots;
-  };
-
-  const timeSlots = generateTimeSlots();
+  const timeSlots = useMemo(() => {
+    const slots = new Set();
+    
+    timeBlockData.forEach((day) => {
+      day?.time_slots?.forEach((slot) => {
+        if (slot?.time) {
+          slots.add(slot.time);
+        }
+      });
+    });
+    
+    const sortByMinutes = (time) => {
+      const [hours, minutes] = time.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    
+    return Array.from(slots).sort((a, b) => sortByMinutes(a) - sortByMinutes(b));
+  }, [timeBlockData]);
+  
+  const hasSlots = timeSlots.length > 0;
 
   return (
     <div 
@@ -253,85 +267,152 @@ function TimeBlockUtilizationDashboard() {
 
                   {/* Time Block Grid */}
                   <div className="table-responsive" style={{ maxHeight: '70vh', overflow: 'auto' }}>
-                    <table className="table table-bordered mb-0" style={{ fontSize: '0.875rem' }}>
-                      <thead className="table-primary sticky-top">
-                        <tr>
-                          <th 
-                            className="fw-semibold px-2 py-2 border-0 text-center"
-                            style={{ 
-                              minWidth: '80px',
-                              position: 'sticky',
-                              left: 0,
-                              backgroundColor: '#0d6efd',
-                              zIndex: 10
-                            }}
-                          >
-                            <i className="bi bi-clock me-1"></i>
-                            Time
-                          </th>
-                          {weekDates.map((date, index) => (
+                    {hasSlots ? (
+                      <table className="table table-bordered mb-0" style={{ fontSize: '0.875rem' }}>
+                        <thead className="table-primary sticky-top">
+                          <tr>
                             <th 
-                              key={date}
                               className="fw-semibold px-2 py-2 border-0 text-center"
-                              style={{ minWidth: '120px' }}
-                            >
-                              <div className="d-flex flex-column align-items-center">
-                                <div className="fw-bold">{getDayName(date)}</div>
-                                <small className="text-muted">{getFormattedDate(date)}</small>
-                              </div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {timeSlots.map((timeSlot) => (
-                          <tr key={timeSlot}>
-                            <td 
-                              className="fw-semibold px-2 py-2 text-center border-0"
                               style={{ 
+                                minWidth: '80px',
                                 position: 'sticky',
                                 left: 0,
-                                backgroundColor: '#f8fafc',
-                                zIndex: 5,
-                                borderRight: '2px solid #e2e8f0 !important'
+                                backgroundColor: '#0d6efd',
+                                zIndex: 10
                               }}
                             >
-                              {timeSlot}
-                            </td>
+                              <i className="bi bi-clock me-1"></i>
+                              Time
+                            </th>
                             {weekDates.map((date) => {
-                              const dayData = timeBlockData.find(d => d.date === date);
-                              const slotData = dayData?.time_slots?.find(s => s.time === timeSlot);
-                              const utilization = slotData?.utilization_percentage || 0;
-                              const appointmentCount = slotData?.appointment_count || 0;
-                              const maxCapacity = slotData?.max_capacity || 1;
-                              
+                              const dayData = dayDataByDate[date];
+                              const isClosed = dayData && !dayData.is_open;
                               return (
-                                <td 
-                                  key={`${date}-${timeSlot}`}
-                                  className="px-1 py-2 text-center border-0"
-                                  style={{
-                                    backgroundColor: getTimeSlotColor(utilization),
-                                    border: '1px solid #e2e8f0',
-                                    position: 'relative',
-                                    cursor: 'pointer'
-                                  }}
-                                  title={`${timeSlot} - ${getDayName(date)} ${getFormattedDate(date)}\nUtilization: ${utilization}%\nAppointments: ${appointmentCount}/${maxCapacity}`}
+                                <th 
+                                  key={date}
+                                  className="fw-semibold px-2 py-2 border-0 text-center"
+                                  style={{ minWidth: '140px' }}
                                 >
-                                  <div className="d-flex flex-column align-items-center">
-                                    <small className="fw-semibold" style={{ fontSize: '0.75rem' }}>
-                                      {utilization}%
-                                    </small>
-                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
-                                      {appointmentCount}/{maxCapacity}
-                                    </small>
+                                  <div className="d-flex flex-column align-items-center gap-1">
+                                    <div className="fw-bold">{getDayName(date)}</div>
+                                    <small className="text-muted">{getFormattedDate(date)}</small>
+                                    {isClosed ? (
+                                      <span className="badge bg-light text-danger border border-danger-subtle px-2 py-1">
+                                        Closed
+                                      </span>
+                                    ) : (
+                                      <small className="text-muted fw-semibold">
+                                        {dayData?.open_time && dayData?.close_time
+                                          ? `${dayData.open_time} - ${dayData.close_time}`
+                                          : 'No hours'}
+                                      </small>
+                                    )}
                                   </div>
-                                </td>
+                                </th>
                               );
                             })}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {timeSlots.map((timeSlot) => (
+                            <tr key={timeSlot}>
+                              <td 
+                                className="fw-semibold px-2 py-2 text-center border-0"
+                                style={{ 
+                                  position: 'sticky',
+                                  left: 0,
+                                  backgroundColor: '#f8fafc',
+                                  zIndex: 5,
+                                  borderRight: '2px solid #e2e8f0 !important'
+                                }}
+                              >
+                                {timeSlot}
+                              </td>
+                              {weekDates.map((date) => {
+                                const dayData = dayDataByDate[date];
+                                const isClosed = dayData && !dayData.is_open;
+                                const slotData = dayData?.time_slots?.find((s) => s.time === timeSlot);
+                                
+                                if (isClosed) {
+                                  return (
+                                    <td
+                                      key={`${date}-${timeSlot}`}
+                                      className="px-1 py-2 text-center border-0"
+                                      style={{
+                                        backgroundColor: '#f1f5f9',
+                                        border: '1px solid #e2e8f0',
+                                        color: '#c2410c',
+                                        fontWeight: 600,
+                                        fontSize: '0.75rem'
+                                      }}
+                                      title="Clinic closed"
+                                    >
+                                      Closed
+                                    </td>
+                                  );
+                                }
+                                
+                                if (!slotData) {
+                                  return (
+                                    <td
+                                      key={`${date}-${timeSlot}`}
+                                      className="px-1 py-2 text-center border-0"
+                                      style={{
+                                        backgroundColor: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
+                                        color: '#94a3b8',
+                                        fontStyle: 'italic',
+                                        fontSize: '0.75rem'
+                                      }}
+                                      title="Not in schedule"
+                                    >
+                                      Not in schedule
+                                    </td>
+                                  );
+                                }
+                                
+                                const utilization = slotData.utilization_percentage || 0;
+                                const appointmentCount = slotData.appointment_count || 0;
+                                const maxCapacity = slotData.max_capacity || 1;
+                                
+                                return (
+                                  <td 
+                                    key={`${date}-${timeSlot}`}
+                                    className="px-1 py-2 text-center border-0"
+                                    style={{
+                                      backgroundColor: getTimeSlotColor(utilization),
+                                      border: '1px solid #e2e8f0',
+                                      position: 'relative',
+                                      cursor: 'pointer'
+                                    }}
+                                    title={`${timeSlot} - ${getDayName(date)} ${getFormattedDate(date)}\nUtilization: ${utilization}%\nAppointments: ${appointmentCount}/${maxCapacity}`}
+                                  >
+                                    <div className="d-flex flex-column align-items-center">
+                                      <small className="fw-semibold" style={{ fontSize: '0.75rem' }}>
+                                        {utilization}%
+                                      </small>
+                                      <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                        {appointmentCount}/{maxCapacity}
+                                      </small>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="d-flex flex-column justify-content-center align-items-center text-center py-5">
+                        <i className="bi bi-calendar-x fs-1 text-muted mb-3"></i>
+                        <p className="mb-1 fw-semibold" style={{ color: '#1e293b' }}>
+                          No clinic hours scheduled this week
+                        </p>
+                        <small className="text-muted">
+                          All days are closed or no time slots were returned by the API.
+                        </small>
+                      </div>
+                    )}
                   </div>
 
                   {/* Summary Statistics */}
