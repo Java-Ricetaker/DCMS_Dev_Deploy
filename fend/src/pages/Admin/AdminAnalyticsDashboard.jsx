@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../../api/api";
 import ExcelJS from 'exceljs';
 import { addClinicHeader } from "../../utils/pdfHeader";
@@ -32,16 +32,113 @@ ChartJS.register(
   Filler
 );
 
+const toMonthName = (ym) => {
+  const [y, m] = String(ym || "").split("-").map(Number);
+  if (!y || !m) return "";
+  return new Date(y, m - 1, 1).toLocaleString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const prevMonthOf = (ym) => {
+  const [y, m] = String(ym || "").split("-").map(Number);
+  if (!y || !m) return ym;
+  const d = new Date(y, m - 1, 1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
+function derivePrev(current, pct) {
+  if (current == null) return 0;
+  if (pct === -100 && current === 0) return 0;
+  const denom = 1 + ((pct ?? 0) / 100);
+  return denom === 0 ? 0 : Number((current / denom).toFixed(2));
+}
+
+const computePctChange = (current, previous, fallback = 0) => {
+  const curr = Number(current ?? 0);
+  const prev = Number(previous ?? 0);
+  if (prev === 0) {
+    if (curr === 0) return 0;
+    return typeof fallback === "number" ? fallback : 0;
+  }
+  return Number((((curr - prev) / prev) * 100).toFixed(2));
+};
+
+const normalizeSummary = (summaryData) => {
+  if (!summaryData) return null;
+  const normalized = { ...summaryData };
+  if (normalized.insights && !Array.isArray(normalized.insights)) {
+    console.warn("Insights data is not an array, converting...");
+    normalized.insights = [];
+  }
+  return normalized;
+};
+
+const buildComparedKpis = (primarySummary, compareSummary) => {
+  const primaryKpis = primarySummary?.kpis || {};
+  const compareKpis = compareSummary?.kpis || {};
+  const derived = {};
+
+  Object.entries(primaryKpis).forEach(([key, entry]) => {
+    if (entry && typeof entry === "object" && "value" in entry) {
+      const compareEntry = compareKpis[key];
+      const prevValue =
+        (compareEntry && typeof compareEntry.value === "number"
+          ? compareEntry.value
+          : entry?.prev ?? derivePrev(entry?.value, entry?.pct_change)) ?? 0;
+      derived[key] = {
+        ...entry,
+        prev: prevValue,
+        pct_change: computePctChange(entry?.value, prevValue, entry?.pct_change),
+      };
+    } else {
+      derived[key] = entry;
+    }
+  });
+
+  if (primaryKpis.payment_method_share) {
+    const share = {};
+    ["cash", "hmo", "maya"].forEach((method) => {
+      const base = primaryKpis.payment_method_share[method] || {};
+      const compare = compareKpis.payment_method_share?.[method] || {};
+      const compareShare =
+        typeof compare.share_pct === "number" ? compare.share_pct : null;
+      let pctPointChange = base.pct_point_change ?? 0;
+      if (
+        typeof base.share_pct === "number" &&
+        typeof compareShare === "number"
+      ) {
+        pctPointChange = Number((base.share_pct - compareShare).toFixed(2));
+      }
+      share[method] = {
+        ...base,
+        pct_point_change: pctPointChange,
+        compare_share_pct: compareShare,
+      };
+    });
+    derived.payment_method_share = share;
+  }
+
+  return derived;
+};
+
 export default function AdminAnalyticsDashboard() {
-  const [month, setMonth] = useState(() =>
+  const [primaryMonth, setPrimaryMonth] = useState(() =>
     new Date().toISOString().slice(0, 7)
+  );
+  const [compareMonth, setCompareMonth] = useState(() =>
+    prevMonthOf(new Date().toISOString().slice(0, 7))
   );
   const [trendRange, setTrendRange] = useState(6);
   const [selectedMetric, setSelectedMetric] = useState('visits');
-  const [loading, setLoading] = useState(false);
   const [trendLoading, setTrendLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [data, setData] = useState(null);
+  const [summaryMap, setSummaryMap] = useState({});
+  const summaryMapRef = useRef(summaryMap);
+  useEffect(() => {
+    summaryMapRef.current = summaryMap;
+  }, [summaryMap]);
   const [trendData, setTrendData] = useState(null);
   
   // New state for revenue-specific controls
@@ -49,37 +146,114 @@ export default function AdminAnalyticsDashboard() {
   const [revenueStartDate, setRevenueStartDate] = useState('');
   const [revenueEndDate, setRevenueEndDate] = useState('');
 
-  // Load main analytics data (KPIs, insights, etc.)
-  const loadMainData = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const summaryRes = await api.get("/api/analytics/summary", {
-        params: { period: month },
-      });
-      
-      const summaryData = summaryRes.data || null;
-      
-      // Debug logging
-      console.log("Analytics API Response:", summaryData);
-      console.log("Has insights:", summaryData?.insights ? "Yes" : "No");
-      console.log("Insights count:", summaryData?.insights?.length || 0);
-      
-      // Ensure insights is an array if it exists
-      if (summaryData && summaryData.insights && !Array.isArray(summaryData.insights)) {
-        console.warn("Insights data is not an array, converting...");
-        summaryData.insights = [];
+  const fetchSummary = useCallback(
+    async (monthToFetch, { force = false } = {}) => {
+      if (!monthToFetch) return null;
+      const cached = summaryMapRef.current[monthToFetch];
+      if (!force && cached?.data && !cached?.error) {
+        return cached.data;
       }
-      
-      setData(summaryData);
-    } catch (e) {
-      console.error("Analytics loading error:", e);
-      console.error("Error response:", e?.response?.data);
-      setError(e?.response?.data?.message || e?.message || "Failed to load analytics.");
-    } finally {
-      setLoading(false);
+      setSummaryMap((prev) => ({
+        ...prev,
+        [monthToFetch]: {
+          data: cached?.data ?? null,
+          loading: true,
+          error: "",
+        },
+      }));
+      try {
+        const summaryRes = await api.get("/api/analytics/summary", {
+          params: { period: monthToFetch },
+        });
+        
+        const summaryData = normalizeSummary(summaryRes.data || null);
+        
+        console.log("Analytics API Response:", summaryData);
+        console.log("Has insights:", summaryData?.insights ? "Yes" : "No");
+        console.log("Insights count:", summaryData?.insights?.length || 0);
+        
+        setSummaryMap((prev) => ({
+          ...prev,
+          [monthToFetch]: {
+            data: summaryData,
+            loading: false,
+            error: "",
+          },
+        }));
+        return summaryData;
+      } catch (e) {
+        console.error("Analytics loading error:", e);
+        console.error("Error response:", e?.response?.data);
+        const baseMessage =
+          e?.response?.data?.message ||
+          e?.message ||
+          "Failed to load analytics.";
+        const message = `${baseMessage} (${monthToFetch})`;
+        setSummaryMap((prev) => ({
+          ...prev,
+          [monthToFetch]: {
+            ...(prev[monthToFetch] || {}),
+            loading: false,
+            error: message,
+          },
+        }));
+        return null;
+      }
+    },
+    []
+  );
+
+  const activeCompareMonth =
+    (compareMonth || "").trim() || prevMonthOf(primaryMonth);
+
+  useEffect(() => {
+    const monthsToFetch = [primaryMonth].filter(Boolean);
+    if (
+      activeCompareMonth &&
+      activeCompareMonth !== primaryMonth
+    ) {
+      monthsToFetch.push(activeCompareMonth);
     }
+    monthsToFetch.forEach((m) => fetchSummary(m));
+  }, [primaryMonth, activeCompareMonth, fetchSummary]);
+
+  const primarySummary = summaryMap[primaryMonth]?.data || null;
+  const compareSummary = activeCompareMonth
+    ? summaryMap[activeCompareMonth]?.data || null
+    : null;
+  const loading =
+    Boolean(summaryMap[primaryMonth]?.loading) ||
+    Boolean(
+      activeCompareMonth &&
+        activeCompareMonth !== primaryMonth &&
+        summaryMap[activeCompareMonth]?.loading
+    );
+  const error =
+    summaryMap[primaryMonth]?.error ||
+    (activeCompareMonth && activeCompareMonth !== primaryMonth
+      ? summaryMap[activeCompareMonth]?.error
+      : "") ||
+    "";
+
+  const handleRefreshSummaries = () => {
+    const uniqueMonths = Array.from(
+      new Set(
+        [primaryMonth, activeCompareMonth].filter(
+          (monthKey) => !!monthKey && monthKey.length
+        )
+      )
+    );
+    uniqueMonths.forEach((m) => fetchSummary(m, { force: true }));
   };
+  const primaryMonthLabel = toMonthName(primaryMonth);
+  const autoCompareLabel = toMonthName(prevMonthOf(primaryMonth));
+  const compareMonthLabel = toMonthName(activeCompareMonth);
+  const compareLabelDisplay = compareMonthLabel || autoCompareLabel || "previous month";
+  const compareBannerLabel = compareMonth?.trim()
+    ? compareLabelDisplay
+    : autoCompareLabel
+      ? `${autoCompareLabel} (auto)`
+      : compareLabelDisplay;
 
   // Load trend data only
   const loadTrendData = async () => {
@@ -123,16 +297,6 @@ export default function AdminAnalyticsDashboard() {
     }
   };
 
-  // Load both main data and trend data
-  const load = async () => {
-    await Promise.all([loadMainData(), loadTrendData()]);
-  };
-
-  // Load main data when month changes
-  useEffect(() => {
-    loadMainData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month]);
 
   // Clear revenue-specific controls when switching to non-revenue metrics
   useEffect(() => {
@@ -150,18 +314,14 @@ export default function AdminAnalyticsDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trendRange, selectedMetric, revenueTimeframe, revenueStartDate, revenueEndDate]);
 
-  // Initial load
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Export functions
   const downloadPdf = async () => {
     try {
       const { default: jsPDF } = await import("jspdf");
       const { default: autoTable } = await import("jspdf-autotable");
       const doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+      const primaryLabel = primaryMonthLabel || primaryMonth || "Primary Month";
+      const compareLabel = compareMonthLabel || autoCompareLabel || "Compare Month";
       
       // Helper function to add section title
       const addSectionTitle = (doc, title, currentY) => {
@@ -184,7 +344,9 @@ export default function AdminAnalyticsDashboard() {
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Report Period: ${month}`, 40, currentY);
+      doc.text(`Report Period: ${primaryLabel}`, 40, currentY);
+      currentY += 15;
+      doc.text(`Comparison Period: ${compareLabel}`, 40, currentY);
       currentY += 15;
       
       // Add current trend information
@@ -211,7 +373,7 @@ export default function AdminAnalyticsDashboard() {
       currentY = addSectionTitle(doc, "Key Performance Indicators", currentY);
       
       const kpiData = [
-        ["Metric", "Current", "Previous", "Change", "Trend"],
+        ["Metric", primaryLabel, compareLabel, "Change", "Trend"],
         ["Total Visits", String(k?.total_visits?.value ?? 0), String(k?.total_visits?.prev ?? 0), `${k?.total_visits?.pct_change ?? 0}%`, (k?.total_visits?.pct_change ?? 0) >= 0 ? "+ Positive" : "- Negative"],
         ["Approved Appts", String(k?.approved_appointments?.value ?? 0), String(k?.approved_appointments?.prev ?? 0), `${k?.approved_appointments?.pct_change ?? 0}%`, (k?.approved_appointments?.pct_change ?? 0) >= 0 ? "+ Positive" : "- Negative"],
         ["No-shows", String(k?.no_shows?.value ?? 0), String(k?.no_shows?.prev ?? 0), `${k?.no_shows?.pct_change ?? 0}%`, (k?.no_shows?.pct_change ?? 0) >= 0 ? "+ Concern" : "- Better"],
@@ -237,8 +399,8 @@ export default function AdminAnalyticsDashboard() {
         },
         columnStyles: {
           0: { cellWidth: 100 }, // Metric
-          1: { cellWidth: 80 },  // Current
-          2: { cellWidth: 80 },  // Previous
+          1: { cellWidth: 90 },  // Primary
+          2: { cellWidth: 90 },  // Compare
           3: { cellWidth: 60 },  // Change
           4: { cellWidth: 70 }   // Trend
         }
@@ -248,7 +410,7 @@ export default function AdminAnalyticsDashboard() {
       currentY = addSectionTitle(doc, "Payment Method Distribution", (doc.lastAutoTable?.finalY || 100) + 20);
       
       const paymentData = [
-        ["Payment Method", "Count", "Percentage"],
+        ["Payment Method", `Count (${primaryLabel})`, "Share (%)"],
         ["Cash", String(k?.payment_method_share?.cash?.count ?? 0), `${k?.payment_method_share?.cash?.share_pct ?? 0}%`],
         ["HMO", String(k?.payment_method_share?.hmo?.count ?? 0), `${k?.payment_method_share?.hmo?.share_pct ?? 0}%`],
         ["Maya", String(k?.payment_method_share?.maya?.count ?? 0), `${k?.payment_method_share?.maya?.share_pct ?? 0}%`]
@@ -266,7 +428,7 @@ export default function AdminAnalyticsDashboard() {
         currentY = addSectionTitle(doc, "Revenue by Service", (doc.lastAutoTable?.finalY || 100) + 20);
         
         const serviceData = [
-          ["Service", "Current Revenue", "Previous Revenue", "Change (%)"],
+          ["Service", `${primaryLabel} Revenue`, `${compareLabel} Revenue`, "Change (%)"],
           ...data.top_revenue_services.map(service => [
             service.service_name,
             `PHP ${service.revenue.toLocaleString()}`,
@@ -333,7 +495,7 @@ export default function AdminAnalyticsDashboard() {
         });
       }
 
-      doc.save(`analytics-report-${month}.pdf`);
+      doc.save(`analytics-report-${primaryMonth}.pdf`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to generate PDF.");
@@ -344,13 +506,15 @@ export default function AdminAnalyticsDashboard() {
     try {
       const { styleHeaderRow, styleDataRow, addWorksheetHeader, formatCurrency, formatPercentage, styleTotalRow } = await import("../../utils/excelStyling");
       const workbook = new ExcelJS.Workbook();
+      const primaryLabel = primaryMonthLabel || primaryMonth || "Primary Month";
+      const compareLabel = compareMonthLabel || autoCompareLabel || "Compare Month";
       
       // KPI Overview Sheet
       const kpiSheet = workbook.addWorksheet('KPI Overview');
-      let startRow = addWorksheetHeader(kpiSheet, 'Analytics Dashboard Report', `Report Period: ${month}`);
+      let startRow = addWorksheetHeader(kpiSheet, 'Analytics Dashboard Report', `Primary: ${primaryLabel} | Compare: ${compareLabel}`);
       
       // Add header row
-      const headerRow = kpiSheet.addRow(['Metric', 'Current Value', 'Previous Value', 'Change (%)', 'Trend Status']);
+      const headerRow = kpiSheet.addRow(['Metric', primaryLabel, compareLabel, 'Change (%)', 'Trend Status']);
       styleHeaderRow(headerRow);
       
       // Add data rows
@@ -401,9 +565,9 @@ export default function AdminAnalyticsDashboard() {
 
       // Payment Method Share Sheet
       const paymentSheet = workbook.addWorksheet('Payment Methods');
-      startRow = addWorksheetHeader(paymentSheet, 'Payment Method Analysis', `Report Period: ${month}`);
+      startRow = addWorksheetHeader(paymentSheet, 'Payment Method Analysis', `Primary: ${primaryLabel} | Compare: ${compareLabel}`);
       
-      const paymentHeaderRow = paymentSheet.addRow(['Payment Method', 'Count', 'Percentage']);
+      const paymentHeaderRow = paymentSheet.addRow(['Payment Method', `Count (${primaryLabel})`, 'Share (%)']);
       styleHeaderRow(paymentHeaderRow);
       
       const paymentData = [
@@ -427,9 +591,9 @@ export default function AdminAnalyticsDashboard() {
       // Revenue by Service Sheet
       if (data?.top_revenue_services?.length > 0) {
         const serviceSheet = workbook.addWorksheet('Revenue by Service');
-        startRow = addWorksheetHeader(serviceSheet, 'Revenue by Service', `Report Period: ${month}`);
+        startRow = addWorksheetHeader(serviceSheet, 'Revenue by Service', `Primary: ${primaryLabel} | Compare: ${compareLabel}`);
         
-        const serviceHeaderRow = serviceSheet.addRow(['Service', 'Current Revenue', 'Previous Revenue', 'Change (%)']);
+        const serviceHeaderRow = serviceSheet.addRow(['Service', `${primaryLabel} Revenue`, `${compareLabel} Revenue`, 'Change (%)']);
         styleHeaderRow(serviceHeaderRow);
         
         data.top_revenue_services.forEach((service, index) => {
@@ -498,7 +662,7 @@ export default function AdminAnalyticsDashboard() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `analytics-report-${month}.xlsx`;
+      link.download = `analytics-report-${primaryMonth}.xlsx`;
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (e) {
@@ -507,7 +671,11 @@ export default function AdminAnalyticsDashboard() {
     }
   };
 
-  const k = data?.kpis || {};
+  const data = primarySummary;
+  const k = useMemo(
+    () => buildComparedKpis(primarySummary, compareSummary),
+    [primarySummary, compareSummary]
+  );
 
 
   const payBar = useMemo(() => {
@@ -592,6 +760,9 @@ export default function AdminAnalyticsDashboard() {
 
   // Individual Pie Chart Configurations
   const chartConfigs = useMemo(() => {
+    const primaryLabel = primaryMonthLabel || "Primary Month";
+    const compareLabel = compareMonthLabel || "Compare Month";
+    const pieLabels = [primaryLabel, compareLabel];
     const visits = k?.total_visits?.value || 0;
     const approved = k?.approved_appointments?.value || 0;
     const noShows = k?.no_shows?.value || 0;
@@ -610,7 +781,7 @@ export default function AdminAnalyticsDashboard() {
         color: '#8B5CF6', // Violet
         glowColor: 'rgba(139, 92, 246, 0.4)',
         data: {
-          labels: ['Current Month', 'Previous Month'],
+          labels: pieLabels,
           datasets: [{
             data: [visits, k?.total_visits?.prev || 0],
             backgroundColor: ['#8B5CF6', 'rgba(139, 92, 246, 0.3)'],
@@ -631,7 +802,7 @@ export default function AdminAnalyticsDashboard() {
         color: '#0EA5E9', // Electric Blue
         glowColor: 'rgba(14, 165, 233, 0.4)',
         data: {
-          labels: ['Current Month', 'Previous Month'],
+          labels: pieLabels,
           datasets: [{
             data: [approved, k?.approved_appointments?.prev || 0],
             backgroundColor: ['#0EA5E9', 'rgba(14, 165, 233, 0.3)'],
@@ -652,7 +823,7 @@ export default function AdminAnalyticsDashboard() {
         color: '#FF6B6B', // Coral
         glowColor: 'rgba(255, 107, 107, 0.4)',
         data: {
-          labels: ['Current Month', 'Previous Month'],
+          labels: pieLabels,
           datasets: [{
             data: [noShows, k?.no_shows?.prev || 0],
             backgroundColor: ['#FF6B6B', 'rgba(255, 107, 107, 0.3)'],
@@ -673,7 +844,7 @@ export default function AdminAnalyticsDashboard() {
         color: '#84CC16', // Lime Green
         glowColor: 'rgba(132, 204, 22, 0.4)',
         data: {
-          labels: ['Current Month', 'Previous Month'],
+          labels: pieLabels,
           datasets: [{
             data: [avgDuration, k?.avg_visit_duration_min?.prev || 0],
             backgroundColor: ['#84CC16', 'rgba(132, 204, 22, 0.3)'],
@@ -685,7 +856,7 @@ export default function AdminAnalyticsDashboard() {
         formatter: (val) => `${val} min`
       }
     ];
-  }, [k]);
+  }, [k, primaryMonthLabel, compareMonthLabel]);
 
   const createPieOptions = (config) => ({
     responsive: true,
@@ -774,16 +945,16 @@ export default function AdminAnalyticsDashboard() {
     const arrowPct = (x) =>
       x > 0 ? `▲ ${x}%` : x < 0 ? `▼ ${Math.abs(x)}%` : "—";
     return {
-      visits: `Change vs last month: ${arrowPct(
+      visits: `Change vs ${compareLabelDisplay}: ${arrowPct(
         k?.total_visits?.pct_change || 0
       )}`,
-      approved: `Change vs last month: ${arrowPct(
+      approved: `Change vs ${compareLabelDisplay}: ${arrowPct(
         k?.approved_appointments?.pct_change || 0
       )}`,
-      noShows: `Change vs last month: ${arrowPct(
+      noShows: `Change vs ${compareLabelDisplay}: ${arrowPct(
         k?.no_shows?.pct_change || 0
       )}`,
-      avgDuration: `Change vs last month: ${arrowPct(
+      avgDuration: `Change vs ${compareLabelDisplay}: ${arrowPct(
         k?.avg_visit_duration_min?.pct_change || 0
       )}`,
     };
@@ -833,7 +1004,7 @@ export default function AdminAnalyticsDashboard() {
     return (
       `Top service: ${s.service_name} (Δ ${change >= 0 ? "▲" : "▼"}${Math.abs(
         change
-      )}% vs last month). ` +
+      )}% vs ${compareLabelDisplay}). ` +
       `Tip: Align stock/staffing; promote under-performers.`
     );
   }, [data]);
@@ -858,21 +1029,6 @@ export default function AdminAnalyticsDashboard() {
     typeof v === "number" ? `${v > 0 ? "+" : ""}${v.toFixed(2)}%` : "0%";
 
   // Month helpers
-  const toMonthName = (ym /* 'YYYY-MM' */) => {
-    const [y, m] = (ym || "").split("-").map(Number);
-    if (!y || !m) return "";
-    return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "short", year: "numeric" });
-  };
-  const prevMonthOf = (ym /* 'YYYY-MM' */) => {
-    const [y, m] = (ym || "").split("-").map(Number);
-    if (!y || !m) return ym;
-    const d = new Date(y, m - 1, 1);
-    d.setMonth(d.getMonth() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  };
-  const lastMonthLabel = toMonthName(prevMonthOf(month));
-  const thisMonthLabel = toMonthName(month);
-
   const fmtUnit = (unit, v) => {
     const n = Number(v || 0);
     if (unit === "money") return `₱${n.toLocaleString()}`;
@@ -880,45 +1036,28 @@ export default function AdminAnalyticsDashboard() {
     return `${n}`; // count
   };
 
-  // Helper to compute previous month values
-  function derivePrev(current, pct) {
-    if (current == null) return 0;
-    if (pct === -100 && current === 0) return 0;
-    const denom = 1 + ((pct ?? 0) / 100);
-    return denom === 0 ? 0 : Number((current / denom).toFixed(2));
-  }
-
-  const tv = k?.total_visits;
-  const aa = k?.approved_appointments;
-  const ns = k?.no_shows;
-  const av = k?.avg_visit_duration_min;
-  const tr = k?.total_revenue;
-
-  const prev = {
-    visits: tv?.prev ?? derivePrev(tv?.value, tv?.pct_change),
-    approved: aa?.prev ?? derivePrev(aa?.value, aa?.pct_change),
-    noShows: ns?.prev ?? derivePrev(ns?.value, ns?.pct_change),
-    avgDur: av?.prev ?? derivePrev(av?.value, av?.pct_change),
-    revenue: tr?.prev ?? derivePrev(tr?.value, tr?.pct_change),
-  };
-
   // Mini 2-bar chart generator
-  const miniCompareData = (lastVal = 0, thisVal = 0, colors = { last:"#9ca3af", curr:"#3b82f6" }) => ({
-    labels: ["Last", "This"],
+  const miniCompareData = (
+    compareVal = 0,
+    primaryVal = 0,
+    colors = { compare: "#9ca3af", primary: "#3b82f6" },
+    labelSet = { compare: "Compare", primary: "Primary" }
+  ) => ({
+    labels: [labelSet.compare, labelSet.primary],
     datasets: [
       {
-        label: "Last Month",
-        data: [lastVal, null],
-        backgroundColor: colors.last,
+        label: labelSet.compare,
+        data: [compareVal, null],
+        backgroundColor: colors.compare,
         borderRadius: 6,
         barThickness: 10,
         categoryPercentage: 0.6,
         borderSkipped: false,
       },
       {
-        label: "This Month",
-        data: [null, thisVal],
-        backgroundColor: colors.curr,
+        label: labelSet.primary,
+        data: [null, primaryVal],
+        backgroundColor: colors.primary,
         borderRadius: 6,
         barThickness: 10,
         categoryPercentage: 0.6,
@@ -937,7 +1076,7 @@ export default function AdminAnalyticsDashboard() {
     }
   };
 
-  const buildMiniOptions = (unit, lastLbl, thisLbl) => ({
+  const buildMiniOptions = (unit, compareLbl, primaryLbl) => ({
     ...baseMiniOptions,
     plugins: {
       ...baseMiniOptions.plugins,
@@ -945,8 +1084,8 @@ export default function AdminAnalyticsDashboard() {
         ...baseMiniOptions.plugins.tooltip,
         callbacks: {
           label: (ctx) => {
-            const isLast = ctx.dataIndex === 0;
-            const label = isLast ? lastLbl : thisLbl;
+            const isCompare = ctx.dataIndex === 0;
+            const label = isCompare ? compareLbl : primaryLbl;
             const val = ctx.raw ?? 0;
             return `${label}: ${fmtUnit(unit, val)}`;
           }
@@ -1116,36 +1255,48 @@ export default function AdminAnalyticsDashboard() {
           </div>
 
           <div className={"small fw-semibold " + ((change ?? 0) >= 0 ? "text-success" : "text-danger")} style={{ marginBottom: "8px" }}>
-            {(change ?? 0) >= 0 ? "↗" : "↘"} {typeof change === "number" ? `${change > 0 ? "+" : ""}${change.toFixed(2)}%` : "0%"} vs last month
+            {(change ?? 0) >= 0 ? "↗" : "↘"} {typeof change === "number" ? `${change > 0 ? "+" : ""}${change.toFixed(2)}%` : "0%"} vs {compareLabelDisplay}
           </div>
 
           {/* Legend */}
           <div className="d-flex align-items-center gap-3 mt-1 mb-1 small text-muted">
             <span className="d-inline-flex align-items-center">
               <span style={{width:8,height:8,background:'#9ca3af',borderRadius:999,display:'inline-block',marginRight:6}}></span>
-              Last month
+              {compareMonthLabel || "Compare Month"}
             </span>
             <span className="d-inline-flex align-items-center">
               <span style={{width:8,height:8,background:color,borderRadius:999,display:'inline-block',marginRight:6}}></span>
-              This month
+              {primaryMonthLabel || "Primary Month"}
             </span>
           </div>
 
           {/* Mini Last vs This */}
           <div style={{ height: 60, marginTop: 2 }}>
             <Bar
-              data={miniCompareData(numericPrev, numericValue, { last:"#9ca3af", curr: color })}
-              options={buildMiniOptions(opts.unit || "count", lastMonthLabel, thisMonthLabel)}
+              data={miniCompareData(
+                numericPrev,
+                numericValue,
+                { compare:"#9ca3af", primary: color },
+                {
+                  compare: compareMonthLabel || "Compare",
+                  primary: primaryMonthLabel || "Primary",
+                }
+              )}
+              options={buildMiniOptions(
+                opts.unit || "count",
+                compareMonthLabel || "Compare Month",
+                primaryMonthLabel || "Primary Month"
+              )}
             />
           </div>
 
           {/* Month labels with values */}
           <div className="d-flex justify-content-between mt-1">
             <small className="text-muted">
-              {lastMonthLabel}: {fmtUnit(opts.unit || "count", numericPrev)}
+              {(compareMonthLabel || "Compare Month")}: {fmtUnit(opts.unit || "count", numericPrev)}
             </small>
             <small className="text-muted">
-              {thisMonthLabel}: {fmtUnit(opts.unit || "count", numericValue)}
+              {(primaryMonthLabel || "Primary Month")}: {fmtUnit(opts.unit || "count", numericValue)}
             </small>
           </div>
 
@@ -1155,7 +1306,7 @@ export default function AdminAnalyticsDashboard() {
             const up = delta >= 0;
             return (
               <div className={`small ${up ? "text-success" : "text-danger"}`}>
-                Δ {opts.unit==="money" ? fmtUnit("money", Math.abs(delta)) : fmtUnit(opts.unit || "count", Math.abs(delta))} {up ? "higher" : "lower"} than last
+                Δ {opts.unit==="money" ? fmtUnit("money", Math.abs(delta)) : fmtUnit(opts.unit || "count", Math.abs(delta))} {up ? "higher" : "lower"} than {compareLabelDisplay}
               </div>
             );
           })()}
@@ -1190,28 +1341,58 @@ export default function AdminAnalyticsDashboard() {
               Real-time insights and performance metrics for your clinic
             </p>
           </div>
-          <div className="d-flex gap-2 align-items-center flex-wrap">
-            <input
-              type="month"
-              className="form-control form-control-sm border-0"
-              style={{
-                width: 180,
-                borderRadius: "16px",
-                padding: "14px 18px",
-                fontSize: "14px",
-                fontWeight: "600",
-                background: "rgba(255, 255, 255, 0.9)",
-                color: "#1E293B",
-                border: "1px solid rgba(59, 130, 246, 0.2)",
-                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
-              }}
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              aria-label="Select month"
-            />
+          <div className="d-flex gap-3 align-items-stretch flex-wrap">
+            <div className="d-flex flex-column" style={{ minWidth: 180 }}>
+              <label className="text-muted small fw-semibold mb-1">
+                Primary Month
+              </label>
+              <input
+                type="month"
+                className="form-control form-control-sm border-0"
+                style={{
+                  borderRadius: "16px",
+                  padding: "14px 18px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  background: "rgba(255, 255, 255, 0.9)",
+                  color: "#1E293B",
+                  border: "1px solid rgba(59, 130, 246, 0.2)",
+                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
+                }}
+                value={primaryMonth}
+                onChange={(e) => setPrimaryMonth(e.target.value)}
+                aria-label="Select primary month"
+              />
+            </div>
+            <div className="d-flex flex-column" style={{ minWidth: 220 }}>
+              <label className="text-muted small fw-semibold mb-1">
+                Compare Month
+              </label>
+              <input
+                type="month"
+                className="form-control form-control-sm border-0"
+                style={{
+                  borderRadius: "16px",
+                  padding: "14px 18px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  background: "rgba(255, 255, 255, 0.9)",
+                  color: "#1E293B",
+                  border: "1px solid rgba(139, 92, 246, 0.2)",
+                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
+                }}
+                value={compareMonth}
+                onChange={(e) => setCompareMonth(e.target.value)}
+                aria-label="Select compare month"
+                placeholder={prevMonthOf(primaryMonth)}
+              />
+              <small className="text-muted mt-2">
+                Leave blank to auto-compare with {toMonthName(prevMonthOf(primaryMonth)) || "the previous month"}.
+              </small>
+            </div>
             <button
               className="btn border-0"
-              onClick={loadMainData}
+              onClick={handleRefreshSummaries}
               disabled={loading}
               style={{
                 background: "linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)",
@@ -1375,6 +1556,11 @@ export default function AdminAnalyticsDashboard() {
           </div>
         ) : (
           <>
+            <div className="mb-3">
+              <small className="text-muted fw-semibold">
+                Comparing {primaryMonthLabel || primaryMonth || "selected month"} vs {compareBannerLabel}
+              </small>
+            </div>
             {/* Modern Light Theme KPI Grid */}
             <div className="row g-4 mb-5">
               {chartConfigs.map((config, index) => (
@@ -1442,7 +1628,7 @@ export default function AdminAnalyticsDashboard() {
                               {config.title}
                             </h6>
                             <small style={{ color: "#64748B", fontSize: "0.8rem" }}>
-                              {toMonthName(month)}
+                              {primaryMonthLabel || primaryMonth}
                             </small>
                           </div>
                         </div>
@@ -1480,7 +1666,7 @@ export default function AdminAnalyticsDashboard() {
                           {config.formatter(config.value)}
                         </div>
                         <div style={{ color: "#64748B", fontSize: "0.85rem" }}>
-                          Previous: {config.formatter(config.prevValue)}
+                          {compareMonthLabel || "Compare Month"}: {config.formatter(config.prevValue)}
                         </div>
                       </div>
 
@@ -1525,7 +1711,7 @@ export default function AdminAnalyticsDashboard() {
                       style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}
                     >
                       <div className="small text-muted mb-2 fw-medium">
-                        Monthly Changes:
+                        Monthly Changes vs {compareLabelDisplay}:
                       </div>
                       <div className="d-flex justify-content-between">
                         <span className="small">
@@ -1696,7 +1882,7 @@ export default function AdminAnalyticsDashboard() {
                       </div>
                       <div className="small text-muted">
                         {k?.total_revenue?.pct_change >= 0 ? "↗" : "↘"}{" "}
-                        {Math.abs(k?.total_revenue?.pct_change ?? 0).toFixed(1)}% vs last month
+                        {Math.abs(k?.total_revenue?.pct_change ?? 0).toFixed(1)}% vs {compareLabelDisplay}
                       </div>
                     </div>
                   </div>
