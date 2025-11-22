@@ -39,6 +39,16 @@ chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 if [ ! -z "$DB_CONNECTION" ] && [ "$DB_CONNECTION" != "" ]; then
   echo "Testing database connection..."
   php artisan db:show 2>&1 || echo "Database connection test failed (this is OK if migrations haven't been run yet)"
+  
+  # Run migrations and seed database
+  echo "Running migrations and seeding database..."
+  php artisan migrate:fresh --seed --force
+  if [ $? -eq 0 ]; then
+    echo "Database migrations and seeding completed successfully"
+  else
+    echo "Warning: Database migration and seeding failed"
+    exit 1
+  fi
 fi
 
 # Clear old caches first to avoid stale config
