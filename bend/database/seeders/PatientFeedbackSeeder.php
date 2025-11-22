@@ -34,6 +34,11 @@ class PatientFeedbackSeeder extends Seeder
             return null;
         }
 
+        // Only create feedback for visits with an assigned dentist
+        if (!$visit->dentist_schedule_id) {
+            return null;
+        }
+
         if (PatientFeedback::where('patient_visit_id', $visit->id)->exists()) {
             return null;
         }
