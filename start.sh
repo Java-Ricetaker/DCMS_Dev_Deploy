@@ -35,20 +35,25 @@ mkdir -p storage/logs
 mkdir -p bootstrap/cache
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
-# Test database connection before caching (if DB is configured)
+# Run migrations and seed database
+# Check if DB_CONNECTION is set, otherwise Laravel defaults may apply
 if [ ! -z "$DB_CONNECTION" ] && [ "$DB_CONNECTION" != "" ]; then
-  echo "Testing database connection..."
-  php artisan db:show 2>&1 || echo "Database connection test failed (this is OK if migrations haven't been run yet)"
-  
-  # Run migrations and seed database
-  echo "Running migrations and seeding database..."
-  php artisan migrate:fresh --seed --force
-  if [ $? -eq 0 ]; then
-    echo "Database migrations and seeding completed successfully"
-  else
-    echo "Warning: Database migration and seeding failed"
-    exit 1
-  fi
+  echo "DB_CONNECTION is set to: $DB_CONNECTION"
+else
+  echo "DB_CONNECTION not explicitly set, Laravel will use default configuration"
+fi
+
+echo "Running database migrations and seeding..."
+echo "Executing: php artisan migrate:fresh --seed --force"
+php artisan migrate:fresh --seed --force
+
+MIGRATION_EXIT_CODE=$?
+if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
+  echo "✅ Database migrations and seeding completed successfully"
+else
+  echo "❌ ERROR: Database migration and seeding failed with exit code $MIGRATION_EXIT_CODE"
+  echo "This will prevent the application from starting correctly."
+  exit $MIGRATION_EXIT_CODE
 fi
 
 # Clear old caches first to avoid stale config
