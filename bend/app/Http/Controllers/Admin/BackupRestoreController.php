@@ -123,11 +123,12 @@ class BackupRestoreController extends Controller
             
             // Create a temporary MySQL configuration file for secure password handling
             $cnfPath = storage_path('app/temp/my_' . time() . '.cnf');
-            $cnfContent = "[client]\n";
-            $cnfContent .= "host=" . $host . "\n";
-            $cnfContent .= "port=" . $port . "\n";
-            $cnfContent .= "user=" . $username . "\n";
-            $cnfContent .= "password=" . $password . "\n";
+        $cnfContent = "[client]\n";
+        $cnfContent .= "host=" . $host . "\n";
+        $cnfContent .= "port=" . $port . "\n";
+        $cnfContent .= "user=" . $username . "\n";
+        $cnfContent .= "password=" . $password . "\n";
+        $cnfContent .= $this->getMysqlSslOptions();
             File::put($cnfPath, $cnfContent);
             
             try {
@@ -547,11 +548,12 @@ class BackupRestoreController extends Controller
             // Create config file for secure password handling
             $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
             $cnfPath = storage_path('app/temp/restore_my_' . time() . '.cnf');
-            $cnfContent = "[client]\n";
-            $cnfContent .= "host=" . $host . "\n";
-            $cnfContent .= "port=" . $port . "\n";
-            $cnfContent .= "user=" . $username . "\n";
-            $cnfContent .= "password=" . $password . "\n";
+        $cnfContent = "[client]\n";
+        $cnfContent .= "host=" . $host . "\n";
+        $cnfContent .= "port=" . $port . "\n";
+        $cnfContent .= "user=" . $username . "\n";
+        $cnfContent .= "password=" . $password . "\n";
+        $cnfContent .= $this->getMysqlSslOptions();
             File::put($cnfPath, $cnfContent);
 
             try {
@@ -725,6 +727,41 @@ class BackupRestoreController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Build SSL options block for mysql CLI based on env vars.
+     */
+    protected function getMysqlSslOptions()
+    {
+        $lines = [];
+
+        $sslMode = env('DB_SSL_MODE', env('MYSQL_CLIENT_SSL_MODE'));
+        if (!empty($sslMode)) {
+            $lines[] = "ssl-mode=" . $sslMode;
+        }
+
+        $sslCa = env('MYSQL_ATTR_SSL_CA', env('DB_SSL_CA'));
+        if (!empty($sslCa)) {
+            $lines[] = "ssl-ca=" . $sslCa;
+        }
+
+        $sslCert = env('MYSQL_ATTR_SSL_CERT', env('DB_SSL_CERT'));
+        if (!empty($sslCert)) {
+            $lines[] = "ssl-cert=" . $sslCert;
+        }
+
+        $sslKey = env('MYSQL_ATTR_SSL_KEY', env('DB_SSL_KEY'));
+        if (!empty($sslKey)) {
+            $lines[] = "ssl-key=" . $sslKey;
+        }
+
+        if (empty($lines)) {
+            return '';
+        }
+
+        // Ensure each option ends with newline
+        return implode("\n", $lines) . "\n";
     }
 
     /**
