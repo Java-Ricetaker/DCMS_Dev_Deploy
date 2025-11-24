@@ -1,0 +1,81 @@
+.patient-records-page {
+  min-height: calc(100vh - 120px);
+}
+
+.patient-records-card {
+  width: min(380px, 100%);
+}
+
+.patient-records-card .patient-list {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.patient-records-card .list-group-item {
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 0;
+  text-align: left;
+}
+
+.patient-records-card .list-group-item.active {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+.visit-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1080;
+}
+
+.visit-detail-panel {
+  width: min(540px, 100%);
+  background: #fff;
+  height: 100%;
+  padding: 1.5rem;
+  overflow-y: auto;
+  box-shadow: -2px 0 12px rgba(15, 23, 42, 0.3);
+}
+
+.visit-printable p {
+  white-space: pre-line;
+}
+
+.notes-privacy-hint {
+  max-width: 360px;
+}
+
+@media (max-width: 991px) {
+  .patient-records-card {
+    width: 100%;
+  }
+
+  .patient-records-card .patient-list {
+    max-height: 320px;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .visit-printable,
+  .visit-printable * {
+    visibility: visible !important;
+  }
+
+  .visit-printable {
+    position: absolute;
+    inset: 0;
+    padding: 1.5rem;
+    background: #fff;
+  }
+}
+

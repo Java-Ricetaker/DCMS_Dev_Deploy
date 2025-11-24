@@ -61,12 +61,14 @@ echo "Clearing old caches..."
 php artisan config:clear 2>&1 || true
 php artisan route:clear 2>&1 || true
 php artisan view:clear 2>&1 || true
+php artisan optimize:clear 2>&1 || true
 
 # Cache configuration
 echo "Caching Laravel configuration..."
 php artisan config:cache 2>&1 || echo "Config cache failed"
 php artisan route:cache 2>&1 || echo "Route cache failed"
 php artisan view:cache 2>&1 || echo "View cache failed"
+php artisan optimize 2>&1 || echo "Optimize failed"
 
 # Show recent errors if log file exists
 if [ -f "storage/logs/laravel.log" ]; then

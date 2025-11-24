@@ -40,6 +40,7 @@ import BackupRestorePage from "../pages/Admin/BackupRestorePage";
 import AdminAnalyticsDashboard from "../pages/Admin/AdminAnalyticsDashboard";
 import AdminDentistPerformance from "../pages/Admin/AdminDentistPerformance";
 import PatientManager from "../pages/Admin/PatientManager";
+import PatientRecordsPage from "../pages/Admin/PatientRecords/PatientRecordsPage";
 import TimeBlockUtilizationDashboard from "../pages/Admin/TimeBlockUtilizationDashboard";
 import PaymentRecords from "../pages/Admin/PaymentRecords";
 import AdminPatientUserBindingPage from "../pages/Admin/PatientUserBindingPage";
@@ -145,6 +146,8 @@ export default function AppRouter() {
           <Route path="appointments" element={<AdminAppointmentManager />} />
           {/* Patient Manager */}
           <Route path="patient-manager" element={<PatientManager />} />
+          {/* Patient Records */}
+          <Route path="patient-records" element={<PatientRecordsPage />} />
           {/* Payment Records */}
           <Route path="payment-records" element={<PaymentRecords />} />
           {/* Backup & Restore */}

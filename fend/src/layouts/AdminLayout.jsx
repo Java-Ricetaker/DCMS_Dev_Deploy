@@ -155,6 +155,14 @@ function AdminLayout() {
             </NavLink>
           </li>
           <li className="nav-item">
+            <NavLink to="/admin/patient-records" className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}>
+              <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a5 5 0 0 1 5 5v2h1a2 2 0 0 1 2 2v11H4V11a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v2h6V7a3 3 0 0 0-3-3zm7 9H5v7h14v-7z"/>
+              </svg>
+              <span className="label">Patient Records</span>
+            </NavLink>
+          </li>
+          <li className="nav-item">
             <NavLink to="/admin/archived-patients" className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}>
               <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 2a2 2 0 0 0-2 2v3H3a1 1 0 0 0-1 1v11c0 1.1.9 2 2 2h16a2 2 0 0 0 2-2V8a1 1 0 0 0-1-1h-1V4a2 2 0 0 0-2-2H6zm0 2h12v3H6V4zm-1 5h14v9H5V9zm4 2v5h6v-5H9z"/>

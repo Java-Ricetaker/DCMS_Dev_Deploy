@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["php82", "curl", "nodejs"]
+nixPkgs = ["php82", "curl", "nodejs", "mysql"]
 
 [phases.install]
 cmds = [

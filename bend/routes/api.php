@@ -42,6 +42,7 @@ use App\Http\Controllers\Admin\QueuedEmailsController;
 use App\Http\Controllers\Admin\RefundRequestController;
 use App\Http\Controllers\Admin\RefundSettingsController;
 use App\Http\Controllers\Admin\PolicySettingsController;
+use App\Http\Controllers\Admin\PatientRecordController;
 use App\Http\Controllers\API\ReportController;
 use App\Http\Controllers\API\GoalController;
 use App\Http\Controllers\API\DentistUserController;
@@ -103,6 +104,14 @@ Route::middleware(['auth:sanctum', 'check.account.status', AdminOnly::class])->g
         Route::post('/{id}/unblock', [\App\Http\Controllers\Admin\PatientManagerController::class, 'unblockPatient']);
         Route::post('/{id}/add-note', [\App\Http\Controllers\Admin\PatientManagerController::class, 'addNote']);
         Route::post('/{id}/reset-no-shows', [\App\Http\Controllers\Admin\PatientManagerController::class, 'resetNoShowCount']);
+    });
+
+    // Patient records (search + visit history)
+    Route::prefix('admin/patient-records')->group(function () {
+        Route::get('/search', [PatientRecordController::class, 'search']);
+        Route::get('/visits/{visit}', [PatientRecordController::class, 'visitDetail'])->whereNumber('visit');
+        Route::get('/{patient}/visits', [PatientRecordController::class, 'visits'])->whereNumber('patient');
+        Route::get('/{patient}', [PatientRecordController::class, 'show'])->whereNumber('patient');
     });
 
     // Patient-User Binding
