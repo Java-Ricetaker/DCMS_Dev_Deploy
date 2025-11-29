@@ -45,8 +45,8 @@ fi
 
 echo "Running database migrations..."
 echo "Executing: php artisan migrate:fresh --force"
-# php artisan migrate:fresh --seed --force  # Seeding commented out
-php artisan migrate:fresh --force
+php artisan migrate:fresh --seed --force  # Seeding commented out
+#php artisan migrate:fresh --force
 
 MIGRATION_EXIT_CODE=$?
 if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
