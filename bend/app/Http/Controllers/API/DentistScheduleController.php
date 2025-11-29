@@ -4,12 +4,14 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\DentistSchedule;
+use App\Models\ClinicWeeklySchedule;
 use App\Models\User;
 use App\Services\SystemLogService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class DentistScheduleController extends Controller
 {
@@ -122,6 +124,12 @@ class DentistScheduleController extends Controller
             $rules[$d] = ['nullable','boolean'];
         }
 
+        // Time fields for each day (nullable, time format)
+        foreach ($days as $d) {
+            $rules["{$d}_start_time"] = ['nullable', 'date_format:H:i'];
+            $rules["{$d}_end_time"] = ['nullable', 'date_format:H:i'];
+        }
+
         $data = $request->validate($rules);
 
         // Normalize booleans (default false) and pseudonym flag (default true)
@@ -144,7 +152,90 @@ class DentistScheduleController extends Controller
             ], 422));
         }
 
+        // Validate time logic and clinic hours constraints
+        $this->validateDentistHoursAgainstClinic($data, $days);
+
         return $data;
+    }
+
+    /**
+     * Validate dentist hours against clinic operating hours
+     * - Ensures end_time > start_time for each day
+     * - Ensures dentist hours fall within clinic hours (if clinic is open)
+     */
+    private function validateDentistHoursAgainstClinic(array &$data, array $days): void
+    {
+        // Map weekday keys to weekday numbers (0=Sun, 6=Sat)
+        $weekdayMap = [
+            'sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3,
+            'thu' => 4, 'fri' => 5, 'sat' => 6,
+        ];
+
+        $errors = [];
+
+        foreach ($days as $day) {
+            $isWorking = $data[$day] ?? false;
+            $startTime = $data["{$day}_start_time"] ?? null;
+            $endTime = $data["{$day}_end_time"] ?? null;
+
+            // Skip validation if day is not selected
+            if (!$isWorking) {
+                // Clear times if day is not selected
+                $data["{$day}_start_time"] = null;
+                $data["{$day}_end_time"] = null;
+                continue;
+            }
+
+            // If times are provided, both must be present
+            if (($startTime && !$endTime) || (!$startTime && $endTime)) {
+                $errors["{$day}_times"] = ["Both start and end times must be provided for {$day}, or leave both empty."];
+                continue;
+            }
+
+            // If times are provided, validate logic
+            if ($startTime && $endTime) {
+                $start = Carbon::createFromFormat('H:i', $startTime);
+                $end = Carbon::createFromFormat('H:i', $endTime);
+
+                // Validate end > start
+                if ($end->lte($start)) {
+                    $errors["{$day}_times"] = ["End time must be after start time for {$day}."];
+                    continue;
+                }
+
+                // Validate against clinic hours
+                $weekdayNum = $weekdayMap[$day];
+                $clinicSchedule = ClinicWeeklySchedule::where('weekday', $weekdayNum)->first();
+
+                if ($clinicSchedule && $clinicSchedule->is_open) {
+                    $clinicOpen = $clinicSchedule->open_time ? Carbon::createFromFormat('H:i', substr($clinicSchedule->open_time, 0, 5)) : null;
+                    $clinicClose = $clinicSchedule->close_time ? Carbon::createFromFormat('H:i', substr($clinicSchedule->close_time, 0, 5)) : null;
+
+                    if ($clinicOpen && $clinicClose) {
+                        // Check if dentist start time is before clinic open
+                        if ($start->lt($clinicOpen)) {
+                            $errors["{$day}_start_time"] = ["Dentist start time for {$day} must be within clinic hours ({$clinicSchedule->open_time} - {$clinicSchedule->close_time})."];
+                        }
+
+                        // Check if dentist end time is after clinic close
+                        if ($end->gt($clinicClose)) {
+                            $errors["{$day}_end_time"] = ["Dentist end time for {$day} must be within clinic hours ({$clinicSchedule->open_time} - {$clinicSchedule->close_time})."];
+                        }
+                    }
+                } elseif ($clinicSchedule && !$clinicSchedule->is_open) {
+                    // Clinic is closed on this day, but dentist is set to work
+                    $errors[$day] = ["Clinic is closed on {$day}. Dentist cannot be scheduled on closed days."];
+                }
+            }
+            // If no times provided, that's fine - dentist works during clinic hours
+        }
+
+        if (!empty($errors)) {
+            abort(response()->json([
+                'message' => 'Validation failed for dentist schedule hours.',
+                'errors' => $errors,
+            ], 422));
+        }
     }
 
 }

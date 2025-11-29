@@ -48,6 +48,14 @@ export default function DentistScheduleManager() {
     email_verified: false,
     password_changed: false,
     sun: false, mon: true, tue: true, wed: true, thu: true, fri: true, sat: false,
+    // Time fields for each day
+    mon_start_time: "", mon_end_time: "",
+    tue_start_time: "", tue_end_time: "",
+    wed_start_time: "", wed_end_time: "",
+    thu_start_time: "", thu_end_time: "",
+    fri_start_time: "", fri_end_time: "",
+    sat_start_time: "", sat_end_time: "",
+    sun_start_time: "", sun_end_time: "",
   };
 
   const [rows, setRows] = useState([]);
@@ -109,6 +117,16 @@ export default function DentistScheduleManager() {
     setShowModal(true);
   };
 
+  // Helper to normalize time from HH:mm:ss to HH:mm for time input
+  const normalizeTimeForInput = (time) => {
+    if (!time) return "";
+    // If time is in HH:mm:ss format, extract HH:mm
+    if (time.includes(":") && time.split(":").length === 3) {
+      return time.substring(0, 5);
+    }
+    return time;
+  };
+
   const openEdit = (row) => {
     setForm({
       id: row.id,
@@ -124,6 +142,21 @@ export default function DentistScheduleManager() {
       password_changed: !!row.password_changed,
       sun: !!row.sun, mon: !!row.mon, tue: !!row.tue, wed: !!row.wed,
       thu: !!row.thu, fri: !!row.fri, sat: !!row.sat,
+      // Time fields
+      mon_start_time: normalizeTimeForInput(row.mon_start_time || ""),
+      mon_end_time: normalizeTimeForInput(row.mon_end_time || ""),
+      tue_start_time: normalizeTimeForInput(row.tue_start_time || ""),
+      tue_end_time: normalizeTimeForInput(row.tue_end_time || ""),
+      wed_start_time: normalizeTimeForInput(row.wed_start_time || ""),
+      wed_end_time: normalizeTimeForInput(row.wed_end_time || ""),
+      thu_start_time: normalizeTimeForInput(row.thu_start_time || ""),
+      thu_end_time: normalizeTimeForInput(row.thu_end_time || ""),
+      fri_start_time: normalizeTimeForInput(row.fri_start_time || ""),
+      fri_end_time: normalizeTimeForInput(row.fri_end_time || ""),
+      sat_start_time: normalizeTimeForInput(row.sat_start_time || ""),
+      sat_end_time: normalizeTimeForInput(row.sat_end_time || ""),
+      sun_start_time: normalizeTimeForInput(row.sun_start_time || ""),
+      sun_end_time: normalizeTimeForInput(row.sun_end_time || ""),
     });
     setErrors({});
     setEditMode(true);
@@ -145,6 +178,29 @@ export default function DentistScheduleManager() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       e.email = "Please enter a valid email address.";
     }
+
+    // Validate time fields for each selected day
+    WEEKDAYS.forEach(day => {
+      if (form[day.key]) {
+        const startTime = form[`${day.key}_start_time`]?.trim();
+        const endTime = form[`${day.key}_end_time`]?.trim();
+
+        // If one time is provided, both must be provided
+        if ((startTime && !endTime) || (!startTime && endTime)) {
+          e[`${day.key}_times`] = `Both start and end times must be provided for ${day.label}, or leave both empty.`;
+        }
+
+        // If both times are provided, validate end > start
+        if (startTime && endTime) {
+          const start = new Date(`2000-01-01T${startTime}`);
+          const end = new Date(`2000-01-01T${endTime}`);
+          if (end <= start) {
+            e[`${day.key}_times`] = `End time must be after start time for ${day.label}.`;
+          }
+        }
+      }
+    });
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -165,6 +221,35 @@ export default function DentistScheduleManager() {
         email: form.email?.trim(), // required
         sun: !!form.sun, mon: !!form.mon, tue: !!form.tue, wed: !!form.wed,
         thu: !!form.thu, fri: !!form.fri, sat: !!form.sat,
+        // Time fields - only include if day is selected and times are provided
+        ...(form.mon ? {
+          mon_start_time: form.mon_start_time?.trim() || null,
+          mon_end_time: form.mon_end_time?.trim() || null,
+        } : {}),
+        ...(form.tue ? {
+          tue_start_time: form.tue_start_time?.trim() || null,
+          tue_end_time: form.tue_end_time?.trim() || null,
+        } : {}),
+        ...(form.wed ? {
+          wed_start_time: form.wed_start_time?.trim() || null,
+          wed_end_time: form.wed_end_time?.trim() || null,
+        } : {}),
+        ...(form.thu ? {
+          thu_start_time: form.thu_start_time?.trim() || null,
+          thu_end_time: form.thu_end_time?.trim() || null,
+        } : {}),
+        ...(form.fri ? {
+          fri_start_time: form.fri_start_time?.trim() || null,
+          fri_end_time: form.fri_end_time?.trim() || null,
+        } : {}),
+        ...(form.sat ? {
+          sat_start_time: form.sat_start_time?.trim() || null,
+          sat_end_time: form.sat_end_time?.trim() || null,
+        } : {}),
+        ...(form.sun ? {
+          sun_start_time: form.sun_start_time?.trim() || null,
+          sun_end_time: form.sun_end_time?.trim() || null,
+        } : {}),
       };
 
       if (editMode && form.id) {
@@ -297,8 +382,21 @@ export default function DentistScheduleManager() {
     return `${hours12}:${minutes} ${period}`;
   };
 
-  // Get working hours for a weekday key
-  const getWorkingHours = (weekdayKey) => {
+  // Get working hours for a weekday key - checks dentist-specific times first, then clinic hours
+  const getWorkingHours = (weekdayKey, dentistRow = null) => {
+    // First, check if dentist has specific hours for this day
+    if (dentistRow) {
+      const startTimeKey = `${weekdayKey}_start_time`;
+      const endTimeKey = `${weekdayKey}_end_time`;
+      const dentistStart = dentistRow[startTimeKey];
+      const dentistEnd = dentistRow[endTimeKey];
+      
+      if (dentistStart && dentistEnd) {
+        return `${formatTime(dentistStart)} - ${formatTime(dentistEnd)}`;
+      }
+    }
+    
+    // Fall back to clinic hours
     const weekdayNum = WEEKDAY_KEY_TO_NUMBER[weekdayKey];
     const schedule = scheduleByWeekday[weekdayNum];
     if (schedule && schedule.is_open && schedule.open_time && schedule.close_time) {
@@ -307,16 +405,21 @@ export default function DentistScheduleManager() {
     return null;
   };
 
-  const DayBadge = ({ on, label, hours }) => (
-    <span className={`badge ${on ? "bg-success" : "bg-light text-muted"}`} style={{ fontSize: '0.7rem' }}>
-      {label}
-      {on && hours && (
-        <span className="ms-1" style={{ fontSize: '0.65rem', opacity: 0.9 }}>
-          ({hours})
-        </span>
-      )}
-    </span>
-  );
+  const DayBadge = ({ on, label, hours, dentistRow, weekdayKey }) => {
+    // Determine if dentist has specific hours or uses clinic hours
+    const hasSpecificHours = dentistRow && dentistRow[`${weekdayKey}_start_time`] && dentistRow[`${weekdayKey}_end_time`];
+    
+    return (
+      <span className={`badge ${on ? "bg-success" : "bg-light text-muted"}`} style={{ fontSize: '0.7rem' }}>
+        {label}
+        {on && hours && (
+          <span className="ms-1" style={{ fontSize: '0.65rem', opacity: 0.9 }}>
+            ({hours}{hasSpecificHours ? ' • Custom' : ''})
+          </span>
+        )}
+      </span>
+    );
+  };
 
   return (
     <div 
@@ -444,13 +547,15 @@ export default function DentistScheduleManager() {
                       <td>
                         <div className="d-flex flex-wrap gap-1">
                           {WEEKDAYS.map((d) => {
-                            const hours = getWorkingHours(d.key);
+                            const hours = getWorkingHours(d.key, r);
                             return (
                               <DayBadge 
                                 key={d.key} 
                                 on={!!r[d.key]} 
                                 label={d.label}
                                 hours={hours}
+                                dentistRow={r}
+                                weekdayKey={d.key}
                               />
                             );
                           })}
@@ -645,7 +750,7 @@ export default function DentistScheduleManager() {
                       <label className="form-label fw-semibold">
                         Working Days <span className="text-danger">*</span>
                       </label>
-                      <div className="row g-2">
+                      <div className="row g-2 mb-3">
                         {WEEKDAYS.map(d => (
                           <div key={d.key} className="col-6 col-md-4 col-lg-3">
                             <div className="form-check">
@@ -654,7 +759,15 @@ export default function DentistScheduleManager() {
                                 type="checkbox"
                                 id={`day-${d.key}`}
                                 checked={!!form[d.key]}
-                                onChange={(e) => setForm({ ...form, [d.key]: e.target.checked })} 
+                                onChange={(e) => {
+                                  const newForm = { ...form, [d.key]: e.target.checked };
+                                  // Clear times if day is unchecked
+                                  if (!e.target.checked) {
+                                    newForm[`${d.key}_start_time`] = "";
+                                    newForm[`${d.key}_end_time`] = "";
+                                  }
+                                  setForm(newForm);
+                                }} 
                               />
                               <label className="form-check-label" htmlFor={`day-${d.key}`}>
                                 {d.label}
@@ -664,6 +777,53 @@ export default function DentistScheduleManager() {
                         ))}
                       </div>
                       {errors.weekdays && <div className="text-danger small mt-1">{String(errors.weekdays)}</div>}
+                      
+                      {/* Time pickers for each selected day */}
+                      <div className="row g-3 mt-2">
+                        {WEEKDAYS.map(d => {
+                          if (!form[d.key]) return null;
+                          const startTimeKey = `${d.key}_start_time`;
+                          const endTimeKey = `${d.key}_end_time`;
+                          const timeError = errors[`${d.key}_times`] || errors[startTimeKey] || errors[endTimeKey];
+                          
+                          return (
+                            <div key={`time-${d.key}`} className="col-12 col-md-6">
+                              <div className="card border" style={{ borderRadius: '8px', padding: '12px' }}>
+                                <label className="form-label fw-semibold mb-2">
+                                  <i className="bi bi-clock me-1"></i>
+                                  {d.label} Hours (Optional)
+                                </label>
+                                <div className="row g-2">
+                                  <div className="col-6">
+                                    <label className="form-label small text-muted">Start Time</label>
+                                    <input
+                                      type="time"
+                                      className={`form-control form-control-sm ${timeError ? 'is-invalid' : ''}`}
+                                      value={form[startTimeKey] || ""}
+                                      onChange={(e) => setForm({ ...form, [startTimeKey]: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="col-6">
+                                    <label className="form-label small text-muted">End Time</label>
+                                    <input
+                                      type="time"
+                                      className={`form-control form-control-sm ${timeError ? 'is-invalid' : ''}`}
+                                      value={form[endTimeKey] || ""}
+                                      onChange={(e) => setForm({ ...form, [endTimeKey]: e.target.value })}
+                                    />
+                                  </div>
+                                </div>
+                                {timeError && (
+                                  <div className="text-danger small mt-1">{String(timeError)}</div>
+                                )}
+                                <small className="text-muted">
+                                  Leave empty to work during clinic hours
+                                </small>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </form>

@@ -7,6 +7,7 @@ use App\Models\Patient;
 use App\Models\Service;
 use App\Models\SystemLog;
 use App\Models\Appointment;
+use App\Models\DentistSchedule;
 use App\Models\Payment;
 use App\Models\AppSetting;
 use App\Models\PolicyHistory;
@@ -866,16 +867,61 @@ class AppointmentController extends Controller
         $endTime = $globalCursor->copy();
 
         $activeDentistIds = $snap['active_dentist_ids'] ?? [];
-        $preferredDentistActive = $preferredDentistId && in_array($preferredDentistId, $activeDentistIds, true);
+        
+        // Filter dentists by their specific hours (if set)
+        // Critical: Check if the FULL appointment slot (start to end) is within dentist's custom hours
+        $availableDentistIds = [];
+        $weekday = strtolower($date->format('D')); // sun, mon, tue, etc.
+        
+        foreach ($activeDentistIds as $dentistId) {
+            // Query dentist - ensure we get fresh data from database
+            $dentist = DentistSchedule::find($dentistId);
+            if (!$dentist) {
+                continue;
+            }
+            
+            // Explicitly check if dentist works on this day
+            $weekday = strtolower($date->format('D'));
+            if (!(bool) $dentist->{$weekday}) {
+                continue; // Dentist doesn't work this day
+            }
+            
+            // Check if the entire appointment slot (start to end) is within dentist's hours
+            // This will return false if dentist has custom hours and appointment is outside them
+            if ($dentist->isTimeSlotWithinHours($date, $startTime, $endTime)) {
+                $availableDentistIds[] = $dentistId;
+            }
+        }
+        
+        $preferredDentistActive = $preferredDentistId && in_array($preferredDentistId, $availableDentistIds, true);
         $effectiveHonorPreferred = $requestedHonorPreferred && $preferredDentistId && $preferredDentistActive;
 
         if ($forceDentistId) {
+            // Still check if forced dentist is in available list
+            if (!in_array($forceDentistId, $availableDentistIds, true)) {
+                return [
+                    'ok' => false,
+                    'reason' => 'dentist_not_available',
+                    'message' => 'Selected dentist is not available at this time.',
+                    'snap' => $snap,
+                ];
+            }
             $candidateDentistIds = [$forceDentistId];
             $effectiveHonorPreferred = false;
         } elseif ($effectiveHonorPreferred) {
             $candidateDentistIds = [$preferredDentistId];
         } else {
-            $candidateDentistIds = $activeDentistIds;
+            $candidateDentistIds = $availableDentistIds;
+        }
+        
+        // If no dentists are available at this time, return error
+        if (empty($candidateDentistIds)) {
+            return [
+                'ok' => false,
+                'reason' => 'no_dentists_available',
+                'message' => 'No dentists are available at this time.',
+                'snap' => $snap,
+            ];
         }
 
         $assignedDentistId = null;
@@ -892,11 +938,53 @@ class AppointmentController extends Controller
             }
         }
 
+        // If preferred dentist was requested but not available/has no capacity, fallback to other available dentists
         if ($effectiveHonorPreferred && !$assignedDentistId) {
+            // Try other available dentists (excluding the preferred one)
+            $fallbackDentistIds = array_diff($availableDentistIds, [$preferredDentistId]);
+            foreach ($fallbackDentistIds as $candidateId) {
+                if (!$candidateId) {
+                    continue;
+                }
+                if (!in_array($candidateId, $activeDentistIds, true)) {
+                    continue;
+                }
+                if ($this->dentistHasCapacity($dentistUsage, $candidateId, $startTime, $blocksNeeded)) {
+                    $assignedDentistId = $candidateId;
+                    $effectiveHonorPreferred = false; // Mark that we fell back
+                    break;
+                }
+            }
+            
+            // If still no dentist found after fallback, return error
+            if (!$assignedDentistId) {
+                return [
+                    'ok' => false,
+                    'reason' => 'preferred_dentist_conflict',
+                    'message' => 'Your preferred dentist is already booked for this time. Please choose another slot.',
+                    'snap' => $snap,
+                ];
+            }
+        }
+        
+        // If no dentist was assigned (all candidates have no capacity), return error
+        if (!$assignedDentistId) {
+            // If we have available dentists but none have capacity, it's a capacity issue
+            if (!empty($availableDentistIds)) {
+                return [
+                    'ok' => false,
+                    'reason' => 'no_capacity',
+                    'full_at' => $startNormalized,
+                    'message' => "Time slot starting at {$startNormalized} is already full.",
+                    'snap' => $snap,
+                ];
+            }
+            
+            // Otherwise, no dentists are available at this time
             return [
                 'ok' => false,
-                'reason' => 'preferred_dentist_conflict',
-                'message' => 'Your preferred dentist is already booked for this time. Please choose another slot.',
+                'reason' => 'no_dentists_available',
+                'message' => 'No dentists are available at this time.',
                 'snap' => $snap,
             ];
         }
