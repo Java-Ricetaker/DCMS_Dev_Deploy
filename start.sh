@@ -35,7 +35,7 @@ mkdir -p storage/logs
 mkdir -p bootstrap/cache
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
-# Run migrations and seed database
+# Run migrations (seeding commented out)
 # Check if DB_CONNECTION is set, otherwise Laravel defaults may apply
 if [ ! -z "$DB_CONNECTION" ] && [ "$DB_CONNECTION" != "" ]; then
   echo "DB_CONNECTION is set to: $DB_CONNECTION"
@@ -43,15 +43,16 @@ else
   echo "DB_CONNECTION not explicitly set, Laravel will use default configuration"
 fi
 
-echo "Running database migrations and seeding..."
-echo "Executing: php artisan migrate:fresh --seed --force"
-php artisan migrate:fresh --seed --force
+echo "Running database migrations..."
+echo "Executing: php artisan migrate:fresh --force"
+# php artisan migrate:fresh --seed --force  # Seeding commented out
+php artisan migrate:fresh --force
 
 MIGRATION_EXIT_CODE=$?
 if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
-  echo "✅ Database migrations and seeding completed successfully"
+  echo "✅ Database migrations completed successfully"
 else
-  echo "❌ ERROR: Database migration and seeding failed with exit code $MIGRATION_EXIT_CODE"
+  echo "❌ ERROR: Database migration failed with exit code $MIGRATION_EXIT_CODE"
   echo "This will prevent the application from starting correctly."
   exit $MIGRATION_EXIT_CODE
 fi
