@@ -43,19 +43,19 @@ else
   echo "DB_CONNECTION not explicitly set, Laravel will use default configuration"
 fi
 
-echo "Running database migrations..."
-echo "Executing: php artisan migrate:fresh --force"
-php artisan migrate:fresh --seed --force  # Seeding commented out
+#echo "Running database migrations..."
+#echo "Executing: php artisan migrate:fresh --force"
+#php artisan migrate:fresh --seed --force  # Seeding commented out
 #php artisan migrate:fresh --force
 
-MIGRATION_EXIT_CODE=$?
-if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
-  echo "✅ Database migrations completed successfully"
-else
-  echo "❌ ERROR: Database migration failed with exit code $MIGRATION_EXIT_CODE"
-  echo "This will prevent the application from starting correctly."
-  exit $MIGRATION_EXIT_CODE
-fi
+#MIGRATION_EXIT_CODE=$?
+#if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
+#  echo "✅ Database migrations completed successfully"
+#else
+#  echo "❌ ERROR: Database migration failed with exit code $MIGRATION_EXIT_CODE"
+#  echo "This will prevent the application from starting correctly."
+#  exit $MIGRATION_EXIT_CODE
+#fi
 
 # Clear old caches first to avoid stale config
 echo "Clearing old caches..."
