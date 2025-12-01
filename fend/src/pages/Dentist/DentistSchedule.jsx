@@ -53,6 +53,19 @@ function DentistSchedule() {
     return clinicSchedule.find(schedule => schedule.weekday === weekdayIndex);
   };
 
+  const getDentistTimesForDay = (dayKey) => {
+    if (!dentistSchedule) return null;
+    const startTime = dentistSchedule[`${dayKey}_start_time`];
+    const endTime = dentistSchedule[`${dayKey}_end_time`];
+    if (startTime && endTime) {
+      return {
+        start: startTime,
+        end: endTime
+      };
+    }
+    return null;
+  };
+
   const formatTime = (time) => {
     if (!time) return "Closed";
     return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', {
@@ -123,18 +136,49 @@ function DentistSchedule() {
                       </span>
                     </div>
                     <hr />
-                    <h6>Working Days:</h6>
-                    <div className="row">
-                      {weekdays.map(day => (
-                        <div key={day.key} className="col-6 col-md-4 mb-2">
-                          <div className={`d-flex align-items-center ${
-                            dentistSchedule[day.key] ? 'text-success' : 'text-muted'
-                          }`}>
-                            <i className={`bi ${dentistSchedule[day.key] ? 'bi-check-circle-fill' : 'bi-x-circle'} me-2`}></i>
-                            {day.label}
-                          </div>
-                        </div>
-                      ))}
+                    <h6>My Schedule:</h6>
+                    <div className="table-responsive">
+                      <table className="table table-sm">
+                        <thead>
+                          <tr>
+                            <th>Day</th>
+                            <th>Status</th>
+                            <th>Hours</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weekdays.map(day => {
+                            const isWorking = dentistSchedule[day.key];
+                            const customTimes = getDentistTimesForDay(day.key);
+                            return (
+                              <tr key={day.key}>
+                                <td><strong>{day.label}</strong></td>
+                                <td>
+                                  {isWorking ? (
+                                    <span className="badge bg-success">Working</span>
+                                  ) : (
+                                    <span className="badge bg-secondary">Not working</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {isWorking ? (
+                                    customTimes ? (
+                                      `${formatTime(customTimes.start)} - ${formatTime(customTimes.end)}`
+                                    ) : (
+                                      <span className="text-muted">
+                                        <i className="bi bi-info-circle me-1"></i>
+                                        Follows clinic hours
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 ) : (
