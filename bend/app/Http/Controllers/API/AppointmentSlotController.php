@@ -175,6 +175,52 @@ class AppointmentSlotController extends Controller
             }
         }
 
+        // Filter out past time slots if the requested date is today
+        try {
+            $today = now()->startOfDay();
+            $requestedDateStr = $date->format('Y-m-d');
+            $todayDateStr = $today->format('Y-m-d');
+            
+            if ($requestedDateStr === $todayDateStr) {
+                $now = now();
+                // Calculate the next 30-minute block from current time
+                // Always move to the next available block (e.g., 10:00 → 10:30, 1:16 → 1:30)
+                // Strategy: add 30 minutes, then round down to nearest 30-minute boundary
+                $currentHour = (int)$now->format('H');
+                $currentMinute = (int)$now->format('i');
+                $currentMinutes = $currentHour * 60 + $currentMinute;
+                $nextBlockMinutes = floor(($currentMinutes + 30) / 30) * 30;
+                
+                // Handle overflow (e.g., if we're past 23:30, next block would be tomorrow)
+                if ($nextBlockMinutes >= 1440) {
+                    // No slots available today, show empty list
+                    $valid = [];
+                } else {
+                    // Calculate hours and minutes for the next block
+                    $nextBlockHour = (int)floor($nextBlockMinutes / 60);
+                    $nextBlockMinute = (int)($nextBlockMinutes % 60);
+                    
+                    // Format as HH:MM string directly
+                    $minAllowedTimeString = sprintf('%02d:%02d', $nextBlockHour, $nextBlockMinute);
+                    
+                    // Filter out slots before the minimum allowed time
+                    $valid = array_filter($valid, function($slot) use ($minAllowedTimeString) {
+                        return $slot >= $minAllowedTimeString;
+                    });
+                    
+                    // Re-index the array to remove gaps
+                    $valid = array_values($valid);
+                }
+            }
+        } catch (\Exception $e) {
+            // Log error but don't fail the entire request - continue with unfiltered slots
+            \Log::error('Error filtering same-day time slots', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'date' => $date->format('Y-m-d') ?? 'unknown'
+            ]);
+        }
+
         return response()->json([
             'slots' => $valid,
             'snapshot' => [
