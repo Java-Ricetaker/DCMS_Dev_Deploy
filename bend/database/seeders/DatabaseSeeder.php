@@ -32,9 +32,9 @@ class DatabaseSeeder extends Seeder
             DentistScheduleSeeder::class,
             ReportSeeder::class,
             NotificationLogSeeder::class, // Sample notification logs
-            AnalyticsSeeder::class, // Comprehensive 1-year analytics data
-            PerformanceGoalTestSeeder::class, // Test data for performance goals
-            ReceiptTestSeeder::class, // Test appointments for receipt functionality
+            //AnalyticsSeeder::class, // Comprehensive 1-year analytics data
+            //PerformanceGoalTestSeeder::class, // Test data for performance goals
+            //ReceiptTestSeeder::class, // Test appointments for receipt functionality
             // Add other seeders here as needed
         ]);
         

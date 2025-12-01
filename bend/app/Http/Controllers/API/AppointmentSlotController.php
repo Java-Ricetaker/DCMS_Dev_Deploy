@@ -39,19 +39,6 @@ class AppointmentSlotController extends Controller
             return response()->json(['slots' => []]);
         }
 
-        // Build 30-min grid from open/close (strings like "08:00" .. "17:00")
-        $blocks = ClinicDateResolverService::buildBlocks($snap['open_time'], $snap['close_time']);
-        $usage  = Appointment::slotUsageForDate($date->toDateString(), $blocks);
-
-        $cap = (int) $snap['effective_capacity'];
-
-        // Determine how many blocks the requested service needs (default 1 if none)
-        $requiredBlocks = 1;
-        if (!empty($data['service_id'])) {
-            $service = Service::findOrFail($data['service_id']);
-            $requiredBlocks = max(1, (int) ceil(($service->estimated_minutes ?? 30) / 30));
-        }
-
         $patientBlockedSlots = [];
         $preferredDentist = null;
         $preferredDentistId = null;
@@ -73,6 +60,63 @@ class AppointmentSlotController extends Controller
             : false;
 
         $effectiveHonorPreferred = $requestedHonorPreferred && $preferredDentistId && $preferredDentistActive;
+
+        // Determine time range for building blocks
+        // If honoring preferred dentist and they have custom hours, use those; otherwise use clinic hours
+        $openTime = $snap['open_time'];
+        $closeTime = $snap['close_time'];
+        
+        if ($effectiveHonorPreferred && $preferredDentist) {
+            // Reload dentist to ensure all attributes including custom hours are loaded
+            $preferredDentist = \App\Models\DentistSchedule::find($preferredDentist->id);
+            $weekday = strtolower($date->format('D')); // 'mon', 'tue', etc.
+            try {
+                $dentistHours = $preferredDentist->getHoursForDay($weekday);
+                if ($dentistHours && isset($dentistHours['start']) && isset($dentistHours['end']) 
+                    && !empty($dentistHours['start']) && !empty($dentistHours['end'])) {
+                    // Use dentist's custom schedule hours
+                    $openTime = $dentistHours['start'];
+                    $closeTime = $dentistHours['end'];
+                }
+            } catch (\Exception $e) {
+                // If there's an error getting dentist hours, fallback to clinic hours
+                // Log the error for debugging but continue with clinic hours
+                \Log::warning('Error getting preferred dentist hours', [
+                    'dentist_id' => $preferredDentist->id,
+                    'weekday' => $weekday,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        // Ensure we have valid times before building blocks
+        if (empty($openTime) || empty($closeTime)) {
+            return response()->json(['slots' => []]);
+        }
+
+        // Build 30-min grid from open/close (strings like "08:00" .. "17:00")
+        // This will use either clinic hours or preferred dentist's custom hours
+        try {
+            $blocks = ClinicDateResolverService::buildBlocks($openTime, $closeTime);
+        } catch (\Exception $e) {
+            \Log::error('Error building blocks in AppointmentSlotController', [
+                'open_time' => $openTime,
+                'close_time' => $closeTime,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => 'Error generating time slots: ' . $e->getMessage()], 500);
+        }
+        $usage  = Appointment::slotUsageForDate($date->toDateString(), $blocks);
+
+        $cap = (int) $snap['effective_capacity'];
+
+        // Determine how many blocks the requested service needs (default 1 if none)
+        $requiredBlocks = 1;
+        if (!empty($data['service_id'])) {
+            $service = Service::findOrFail($data['service_id']);
+            $requiredBlocks = max(1, (int) ceil(($service->estimated_minutes ?? 30) / 30));
+        }
 
         $dentistUsage = Appointment::dentistSlotUsageForDate($date->toDateString());
 
